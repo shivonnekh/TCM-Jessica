@@ -203,7 +203,41 @@ def _rule_overrides(
             reasoning="rule: first-touch greeting",
         )
 
+    # First-touch BUT user already mentioned a symptom in their opening
+    # message → compact intro PLUS Constitution Agent on the same turn,
+    # so we don't ask "what's bothering you?" after the user already
+    # told us.
+    if (
+        user.status == UserStatus.NEW
+        and not user.conversation_history
+        and _user_has_complaint_lite(user_message)
+    ):
+        return PlannerDecision(
+            specialists=[SpecialistName.GREETING, SpecialistName.CONSTITUTION],
+            mode="sequential",
+            reasoning="rule: first-touch with symptom — compact intro + tongue ask",
+            notes_for_writer=(
+                "用戶第一句已經講咗症狀。短短自我介紹後，acknowledge 佢嘅問題，"
+                "然後直接問脷相 — 唔好叫佢再講一次唔舒服喺邊。"
+            ),
+        )
+
     return None
+
+
+# Lightweight version of greeting_agent._user_has_complaint — kept here
+# to avoid circular imports. Sync changes if the keyword list changes.
+_COMPLAINT_KEYWORDS_LITE = (
+    "攰", "累", "倦", "痕", "癢", "痛", "感冒", "咳", "失眠", "便秘",
+    "肚瀉", "皮膚", "暗瘡", "濕疹", "敏感", "口乾", "心煩", "唔舒服",
+    "問題", "症狀", "病", "氣虛", "陽虛", "陰虛", "濕熱", "痰濕",
+)
+
+
+def _user_has_complaint_lite(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _COMPLAINT_KEYWORDS_LITE)
 
 
 # -------------------------------------------------------------------

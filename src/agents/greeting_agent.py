@@ -55,16 +55,47 @@ def _load_greetings(path: Path = DEFAULT_GREETINGS_PATH) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("could not load %s: %s — falling back to embedded default", path, exc)
         return {
-            "first_touch": {
-                "id": "jessica_intro_fallback",
+            "first_touch_clean": {
+                "id": "fallback_clean",
                 "bubbles": [
                     "Hi 嗨 ☺️ 我係 Jessica",
                     "Care Plus 心宜中醫嘅註冊中醫師 🌿",
                     "最近身體點啊？有冇邊度唔舒服？",
                 ],
                 "media": [],
-            }
+            },
+            "first_touch_with_complaint": {
+                "id": "fallback_with_complaint",
+                "bubbles": [
+                    "Hi 嗨 ☺️ 我係 Jessica",
+                    "Care Plus 心宜中醫嘅註冊中醫師 🌿",
+                ],
+                "media": [],
+            },
         }
+
+
+# Symptom / health complaint keywords. If the user's FIRST message
+# contains any of these, the greeting collapses to the compact variant
+# and the Planner pairs with Constitution Agent on the same turn.
+_COMPLAINT_KEYWORDS = (
+    "攰", "累", "倦", "痕", "癢", "痕癢", "痛", "頭痛", "頭暈", "胃痛", "肚痛",
+    "經痛", "腰痛", "肩頸痛", "感冒", "咳", "喉嚨", "鼻塞", "失眠", "瞓唔到",
+    "便秘", "屙", "肚瀉", "皮膚", "暗瘡", "痘", "濕疹", "敏感", "口乾",
+    "心煩", "焦慮", "唔舒服", "難受", "唔順", "疲", "唔妥", "問題", "想睇",
+    "想問", "症狀", "病", "唔好", "想調理", "想試", "氣虛", "陽虛", "陰虛",
+    "濕熱", "痰濕", "氣鬱", "血瘀",
+)
+
+
+def _user_has_complaint(text: str) -> bool:
+    """Heuristic — does the user's first message describe a health issue?"""
+    if not text:
+        return False
+    t = text.strip()
+    if len(t) < 2:
+        return False
+    return any(kw in t for kw in _COMPLAINT_KEYWORDS)
 
 
 def _public_base_url() -> str:
@@ -114,9 +145,16 @@ class GreetingAgent:
         )
 
         # FIRST-TOUCH → return the OFFICIAL intro verbatim. No LLM call.
+        # Branch by whether the user's first message already named a
+        # symptom. Compact variant skips the "what's bothering you?"
+        # question because the user just told us.
         if is_first_touch:
             greetings = _load_greetings()
-            ft = greetings.get("first_touch", {})
+            has_complaint = _user_has_complaint(inp.user_message)
+            template_key = (
+                "first_touch_with_complaint" if has_complaint else "first_touch_clean"
+            )
+            ft = greetings.get(template_key) or greetings.get("first_touch_clean", {})
             bubbles = list(ft.get("bubbles", []))
             base = _public_base_url()
             media = [
@@ -127,14 +165,21 @@ class GreetingAgent:
                 }
                 for m in ft.get("media", [])
             ]
+            intent_flags = ["new_user_intro"]
+            if has_complaint:
+                intent_flags.append("complaint_in_first_msg")
             payload = {
                 "official_intro": True,
                 "intro_bubbles": bubbles,
                 "intro_media": media,
                 "tone": "warm",
-                "topic": "first-touch self-introduction",
+                "topic": (
+                    "first-touch self-introduction (with complaint ack)"
+                    if has_complaint
+                    else "first-touch self-introduction"
+                ),
                 "suggested_followup": None,
-                "intent_flags": ["new_user_intro"],
+                "intent_flags": intent_flags,
             }
             output = SpecialistOutput(
                 specialist=SpecialistName.GREETING,
