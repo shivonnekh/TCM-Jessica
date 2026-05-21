@@ -38,13 +38,21 @@ import sys
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field as dc_field
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from src import llm_transcribe
 from src.orchestrator.pipeline import JessicaPipeline, PipelineResult
-from src.whatsapp import blocklist, client, diagnostic_capture, group_gate
+from src.whatsapp import (
+    blocklist,
+    client,
+    diagnostic_capture,
+    group_gate,
+)
+from src.whatsapp import media as whatsapp_media
 from src.whatsapp.models import ChatDaddyMessage, parse_webhook
 
 # Force stdout line-buffering — on Render (no TTY) Python defaults to
@@ -376,14 +384,31 @@ async def _process_turn(
         )
         return
 
-    media_urls = _extract_media_urls(attachments)
+    # Download + decrypt media via ChatDaddy transcoder. Audio → Whisper
+    # transcript (merged into user_message). Image → local /tmp path
+    # passed to Constitution Agent's vision flow.
+    image_paths, transcript = await _download_and_process_media(
+        attachments=attachments,
+        account_id=account_id,
+        chat_id=chat_id,
+        message_id=primary_message_id,
+    )
+
+    effective_message = merged_text
+    if transcript:
+        # Voice note is the user's "message". If they typed text in the
+        # same burst, append both (typed first, then voice).
+        effective_message = (
+            f"{merged_text} {transcript}".strip() if merged_text else transcript
+        )
+        logger.info("[WA] voice transcript: %r", transcript[:120])
 
     async with _lock_for(phone):
         try:
             result: PipelineResult = await pipeline.run_turn(
                 phone=phone,
-                user_message=merged_text,
-                media_urls=media_urls,
+                user_message=effective_message,
+                media_urls=image_paths,
                 merged_from_fragments=fragment_ids,
                 wa_message_id=primary_message_id or None,
             )
@@ -418,13 +443,119 @@ async def _process_turn(
 
 
 def _extract_media_urls(attachments: list[dict]) -> list[str]:
-    """Pull direct URLs off the ChatDaddy attachment dicts."""
+    """Pull direct URLs off the ChatDaddy attachment dicts. (Legacy.)"""
     urls: list[str] = []
     for att in attachments:
         url = att.get("url") or att.get("directPath") or ""
         if url:
             urls.append(url)
     return urls
+
+
+_MEDIA_TMP_DIR = Path(os.environ.get("MEDIA_TMP_DIR", "/tmp/jessica_media"))
+_MEDIA_TMP_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _classify_attachment(att: dict) -> str:
+    """Returns 'audio' | 'image' | 'video' | 'document' | 'other'."""
+    t = (att.get("type") or "").lower()
+    mime = (att.get("mimetype") or att.get("mimeType") or "").lower()
+    if "audio" in t or mime.startswith("audio/") or "ptt" in t:
+        return "audio"
+    if "image" in t or mime.startswith("image/"):
+        return "image"
+    if "video" in t or mime.startswith("video/"):
+        return "video"
+    if "document" in t or mime in ("application/pdf",):
+        return "document"
+    return "other"
+
+
+def _ext_for(kind: str, att: dict) -> str:
+    mime = (att.get("mimetype") or att.get("mimeType") or "").lower()
+    return {
+        "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a",
+        "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+        "video/mp4": "mp4",
+    }.get(mime, {"audio": "ogg", "image": "jpg"}.get(kind, "bin"))
+
+
+async def _download_and_process_media(
+    *,
+    attachments: list[dict],
+    account_id: str,
+    chat_id: str,
+    message_id: str,
+) -> tuple[list[str], str]:
+    """Download attachments via ChatDaddy transcoder; transcribe audio.
+
+    Returns:
+        (image_paths, transcribed_text)
+        - image_paths: local /tmp paths (Constitution Agent → vision)
+        - transcribed_text: concatenated Whisper output for any audio,
+          empty string if no audio (or if transcription failed).
+    """
+    if not attachments:
+        return [], ""
+
+    try:
+        api_token = await client.get_token()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("media download skipped — ChatDaddy auth failed: %s", exc)
+        return [], ""
+
+    image_paths: list[str] = []
+    transcript_parts: list[str] = []
+
+    for idx, att in enumerate(attachments):
+        kind = _classify_attachment(att)
+        if kind not in ("audio", "image"):
+            logger.info("skipping attachment kind=%s (not yet supported)", kind)
+            continue
+
+        try:
+            audio_or_image_bytes = await whatsapp_media.download_media(
+                att,
+                account_id=account_id,
+                chat_id=chat_id,
+                message_id=message_id,
+                api_token=api_token,
+                media_kind=kind,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("download_media failed (kind=%s): %s", kind, exc)
+            continue
+
+        if not audio_or_image_bytes:
+            logger.warning("download_media returned empty (kind=%s)", kind)
+            continue
+
+        if kind == "audio":
+            # Transcribe → text
+            text = await llm_transcribe.transcribe_audio(
+                audio_or_image_bytes,
+                filename_hint=f"{message_id or 'voice'}_{idx}.ogg",
+            )
+            if text:
+                transcript_parts.append(text)
+            else:
+                logger.warning("voice note arrived but Whisper returned empty text")
+
+        elif kind == "image":
+            # Save to /tmp; Constitution Agent base64-encodes from path.
+            ext = _ext_for(kind, att)
+            path = _MEDIA_TMP_DIR / f"{message_id or 'img'}_{idx}.{ext}"
+            try:
+                path.write_bytes(audio_or_image_bytes)
+                image_paths.append(str(path))
+                logger.info(
+                    "saved image (%d bytes) → %s", len(audio_or_image_bytes), path,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("could not save image to %s", path)
+
+    transcript = " ".join(transcript_parts).strip()
+    return image_paths, transcript
 
 
 async def _send_bubbles(
