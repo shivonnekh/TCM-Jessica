@@ -116,7 +116,7 @@ Tone calibration (根據 user.status):
       - greeting.intro_media[i].url            ← 洪醫師肖像，first-touch 必抄
       - constitution.soup_recommendations[i].image_url ← 體質 declare 嗰陣
       - sales.products_to_pitch[i].image_url   ← Sales pitch 嗰陣
-  * 每個 media_to_send entry: {"url": "<verbatim URL>", "after_bubble_idx": 0}
+  * 每個 media_to_send entry: {{"url": "<verbatim URL>", "after_bubble_idx": 0}}
   * 唔識 / payload 入面冇 URL → media_to_send 留 []
   * 唔可以作 URL、唔可以寫 'data/media/...' 等相對路徑
 - 用戶第一次見面 (greeting.intent_flags 包含 "new_user_intro") →
