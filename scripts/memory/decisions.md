@@ -532,3 +532,109 @@
 - 2. **OpenAI 的中文渲染对汤水 product shot 是够用的**（汤水图片不需要做精确的中文标注，跟 dr-baba 要的解剖图 + 穴位标注不一样）
 - 3. **不是终稿** — 这些都是 placeholder，等 Care Plus 给真图就替换掉了。AI 图片在产品页用一周不会出大事，但要先标清楚「示意圖」
 
+
+## 2026-05-21 16:26 — TCM-Jessica
+
+### Decisions & Reasoning
+- 而且你描述的架构 (Planner → 多个 specialist → Final Writer + 平行调用) 跟 Dr. Baba 的 card-driven retrieval pipeline 是**根本不一样**的设计。Fork 出来是对的。
+- - 不可变 state + `_ALLOWED_KEYS` whitelist + 每用户 lock — 防止 typo 幽灵字段、防止 WhatsApp 连发的 TOCTOU
+- - YAML state-machine engine (`flow_engine.py`) — 把步骤顺序跟逻辑耦合死，真实用户会分叉。Planner 取代它。
+- - `pacing.py` 的硬编码 turn counter (「诊断和推荐之间要插 1 个 caring turn」) — 用计数器执行节奏很机械，节奏应该写在 Writer 的 system prompt 里。
+- | **C. OpenAI gpt-image-2** (dr-baba 的 Tier 2 primary) | `OPENAI_API_KEY` | 已经 setup，能用，但**不是极梦** |
+- **我的诚实建议：用 C (OpenAI gpt-image-2)，原因 3 个：**
+- 2. **OpenAI 的中文渲染对汤水 product shot 是够用的**（汤水图片不需要做精确的中文标注，跟 dr-baba 要的解剖图 + 穴位标注不一样）
+- 3. **不是终稿** — 这些都是 placeholder，等 Care Plus 给真图就替换掉了。AI 图片在产品页用一周不会出大事，但要先标清楚「示意圖」
+
+
+## 2026-05-21 16:36 — TCM-Jessica
+
+### Decisions & Reasoning
+- 而且你描述的架构 (Planner → 多个 specialist → Final Writer + 平行调用) 跟 Dr. Baba 的 card-driven retrieval pipeline 是**根本不一样**的设计。Fork 出来是对的。
+- - 不可变 state + `_ALLOWED_KEYS` whitelist + 每用户 lock — 防止 typo 幽灵字段、防止 WhatsApp 连发的 TOCTOU
+- - YAML state-machine engine (`flow_engine.py`) — 把步骤顺序跟逻辑耦合死，真实用户会分叉。Planner 取代它。
+- - `pacing.py` 的硬编码 turn counter (「诊断和推荐之间要插 1 个 caring turn」) — 用计数器执行节奏很机械，节奏应该写在 Writer 的 system prompt 里。
+- | **C. OpenAI gpt-image-2** (dr-baba 的 Tier 2 primary) | `OPENAI_API_KEY` | 已经 setup，能用，但**不是极梦** |
+- **我的诚实建议：用 C (OpenAI gpt-image-2)，原因 3 个：**
+- 2. **OpenAI 的中文渲染对汤水 product shot 是够用的**（汤水图片不需要做精确的中文标注，跟 dr-baba 要的解剖图 + 穴位标注不一样）
+- 3. **不是终稿** — 这些都是 placeholder，等 Care Plus 给真图就替换掉了。AI 图片在产品页用一周不会出大事，但要先标清楚「示意圖」
+
+
+## 2026-05-21 16:40 — TCM-Jessica
+
+### Decisions & Reasoning
+- 而且你描述的架构 (Planner → 多个 specialist → Final Writer + 平行调用) 跟 Dr. Baba 的 card-driven retrieval pipeline 是**根本不一样**的设计。Fork 出来是对的。
+- - 不可变 state + `_ALLOWED_KEYS` whitelist + 每用户 lock — 防止 typo 幽灵字段、防止 WhatsApp 连发的 TOCTOU
+- - YAML state-machine engine (`flow_engine.py`) — 把步骤顺序跟逻辑耦合死，真实用户会分叉。Planner 取代它。
+- - `pacing.py` 的硬编码 turn counter (「诊断和推荐之间要插 1 个 caring turn」) — 用计数器执行节奏很机械，节奏应该写在 Writer 的 system prompt 里。
+- | **C. OpenAI gpt-image-2** (dr-baba 的 Tier 2 primary) | `OPENAI_API_KEY` | 已经 setup，能用，但**不是极梦** |
+- **我的诚实建议：用 C (OpenAI gpt-image-2)，原因 3 个：**
+- 2. **OpenAI 的中文渲染对汤水 product shot 是够用的**（汤水图片不需要做精确的中文标注，跟 dr-baba 要的解剖图 + 穴位标注不一样）
+- 3. **不是终稿** — 这些都是 placeholder，等 Care Plus 给真图就替换掉了。AI 图片在产品页用一周不会出大事，但要先标清楚「示意圖」
+
+
+## 2026-05-21 17:27 — TCM-Jessica
+
+### Decisions & Reasoning
+- 而且你描述的架构 (Planner → 多个 specialist → Final Writer + 平行调用) 跟 Dr. Baba 的 card-driven retrieval pipeline 是**根本不一样**的设计。Fork 出来是对的。
+- - 不可变 state + `_ALLOWED_KEYS` whitelist + 每用户 lock — 防止 typo 幽灵字段、防止 WhatsApp 连发的 TOCTOU
+- - YAML state-machine engine (`flow_engine.py`) — 把步骤顺序跟逻辑耦合死，真实用户会分叉。Planner 取代它。
+- - `pacing.py` 的硬编码 turn counter (「诊断和推荐之间要插 1 个 caring turn」) — 用计数器执行节奏很机械，节奏应该写在 Writer 的 system prompt 里。
+- | **C. OpenAI gpt-image-2** (dr-baba 的 Tier 2 primary) | `OPENAI_API_KEY` | 已经 setup，能用，但**不是极梦** |
+- **我的诚实建议：用 C (OpenAI gpt-image-2)，原因 3 个：**
+- 2. **OpenAI 的中文渲染对汤水 product shot 是够用的**（汤水图片不需要做精确的中文标注，跟 dr-baba 要的解剖图 + 穴位标注不一样）
+- 3. **不是终稿** — 这些都是 placeholder，等 Care Plus 给真图就替换掉了。AI 图片在产品页用一周不会出大事，但要先标清楚「示意圖」
+
+
+## 2026-05-21 17:40 — TCM-Jessica
+
+### Decisions & Reasoning
+- 而且你描述的架构 (Planner → 多个 specialist → Final Writer + 平行调用) 跟 Dr. Baba 的 card-driven retrieval pipeline 是**根本不一样**的设计。Fork 出来是对的。
+- - 不可变 state + `_ALLOWED_KEYS` whitelist + 每用户 lock — 防止 typo 幽灵字段、防止 WhatsApp 连发的 TOCTOU
+- - YAML state-machine engine (`flow_engine.py`) — 把步骤顺序跟逻辑耦合死，真实用户会分叉。Planner 取代它。
+- - `pacing.py` 的硬编码 turn counter (「诊断和推荐之间要插 1 个 caring turn」) — 用计数器执行节奏很机械，节奏应该写在 Writer 的 system prompt 里。
+- | **C. OpenAI gpt-image-2** (dr-baba 的 Tier 2 primary) | `OPENAI_API_KEY` | 已经 setup，能用，但**不是极梦** |
+- **我的诚实建议：用 C (OpenAI gpt-image-2)，原因 3 个：**
+- 2. **OpenAI 的中文渲染对汤水 product shot 是够用的**（汤水图片不需要做精确的中文标注，跟 dr-baba 要的解剖图 + 穴位标注不一样）
+- 3. **不是终稿** — 这些都是 placeholder，等 Care Plus 给真图就替换掉了。AI 图片在产品页用一周不会出大事，但要先标清楚「示意圖」
+
+
+## 2026-05-21 17:44 — TCM-Jessica
+
+### Decisions & Reasoning
+- 你 webhook 进来时就已经有 `accountId` 和 `chatId`，可以**立刻**用这两个 call history。
+- **问题是：** 如果用户之前跟 Jessica 聊过、你们换了服务器/清了数据库，或者用户是第一次到 Jessica 但之前在 ChatDaddy inbox 里聊过，本地就没有 history。
+
+
+## 2026-05-21 17:51 — TCM-Jessica
+
+### Decisions & Reasoning
+- 你 webhook 进来时就已经有 `accountId` 和 `chatId`，可以**立刻**用这两个 call history。
+- **问题是：** 如果用户之前跟 Jessica 聊过、你们换了服务器/清了数据库，或者用户是第一次到 Jessica 但之前在 ChatDaddy inbox 里聊过，本地就没有 history。
+- Q1 最重要 — 第一次从 ChatDaddy 拉到 history 要不要写回本地 CRM？如果写回，下次就有 local history 了，不用每次都 call ChatDaddy。要不要做？
+
+
+## 2026-05-21 17:55 — TCM-Jessica
+
+### Decisions & Reasoning
+- 而且你描述的架构 (Planner → 多个 specialist → Final Writer + 平行调用) 跟 Dr. Baba 的 card-driven retrieval pipeline 是**根本不一样**的设计。Fork 出来是对的。
+- - 不可变 state + `_ALLOWED_KEYS` whitelist + 每用户 lock — 防止 typo 幽灵字段、防止 WhatsApp 连发的 TOCTOU
+- - YAML state-machine engine (`flow_engine.py`) — 把步骤顺序跟逻辑耦合死，真实用户会分叉。Planner 取代它。
+- - `pacing.py` 的硬编码 turn counter (「诊断和推荐之间要插 1 个 caring turn」) — 用计数器执行节奏很机械，节奏应该写在 Writer 的 system prompt 里。
+- | **C. OpenAI gpt-image-2** (dr-baba 的 Tier 2 primary) | `OPENAI_API_KEY` | 已经 setup，能用，但**不是极梦** |
+- **我的诚实建议：用 C (OpenAI gpt-image-2)，原因 3 个：**
+- 2. **OpenAI 的中文渲染对汤水 product shot 是够用的**（汤水图片不需要做精确的中文标注，跟 dr-baba 要的解剖图 + 穴位标注不一样）
+- 3. **不是终稿** — 这些都是 placeholder，等 Care Plus 给真图就替换掉了。AI 图片在产品页用一周不会出大事，但要先标清楚「示意圖」
+
+
+## 2026-05-21 18:08 — TCM-Jessica
+
+### Decisions & Reasoning
+- 你 webhook 进来时就已经有 `accountId` 和 `chatId`，可以**立刻**用这两个 call history。
+- **问题是：** 如果用户之前跟 Jessica 聊过、你们换了服务器/清了数据库，或者用户是第一次到 Jessica 但之前在 ChatDaddy inbox 里聊过，本地就没有 history。
+- Q1 最重要 — 第一次从 ChatDaddy 拉到 history 要不要写回本地 CRM？如果写回，下次就有 local history 了，不用每次都 call ChatDaddy。要不要做？
+- - **为什么写回：** ChatDaddy 是 source of truth，写回之后下次 turn 直接用本地，不用每次都 call ChatDaddy API
+- | `chatId` | 用户的 WhatsApp JID（对话唯一标识） | `85291234567@s.whatsapp.net` |
+- **ChatDaddy 返回的就是这个 chat thread 里的所有消息** — 包括用户发的和 Jessica 发的，按时间排。
+- 1. **History 是 per-conversation，不是 per-user** — 如果同一个人用不同手机号发消息，那是两个独立的 `chatId`，history 不会合并
+- 2. **Local CRM 用 `phone`（从 `chatId` 提取出来的数字部分）做 key** — 所以本地 CRM 和 ChatDaddy 的 lookup key 其实是不一样的，PRD 里的 `_write_back` 要做一次转换
+

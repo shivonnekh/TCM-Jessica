@@ -143,7 +143,7 @@ async def dev_chat(request: Request) -> JSONResponse:
     from pathlib import Path as _Path
 
     from src.llm_transcribe import transcribe_audio
-    from src.whatsapp.router import _MEDIA_TMP_DIR
+    from src.whatsapp.router import _MEDIA_TMP_DIR, _is_restart_command
 
     body = await request.json()
     phone = (body.get("phone") or "").strip()
@@ -155,6 +155,32 @@ async def dev_chat(request: Request) -> JSONResponse:
         return JSONResponse({"error": "missing phone"}, status_code=400)
 
     pipeline: JessicaPipeline = request.app.state.pipeline
+
+    # RESTART command — wipe CRM for this phone (mirrors WA router).
+    if _is_restart_command(text):
+        try:
+            counts = await pipeline._crm.delete_all_for_phone(phone)  # noqa: SLF001
+            logger.info("[dev] RESTART wiped phone=%s counts=%s", phone, counts)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[dev] RESTART failed: %s", exc)
+            return JSONResponse(
+                {
+                    "turn_id": "restart_err",
+                    "bubbles": [f"⚠️ wipe failed: {exc}"],
+                    "media_to_send": [],
+                }
+            )
+        return JSONResponse(
+            {
+                "turn_id": "restart_ok",
+                "bubbles": [
+                    "已清除你嘅資料 🌿 我哋重新開始啦，發 hi 我幫你 onboard 返。"
+                ],
+                "media_to_send": [],
+                "wiped": counts,
+            }
+        )
+
     media_urls: list[str] = []
     transcript: str = ""
 
