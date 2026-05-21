@@ -87,24 +87,11 @@ class JessicaPipeline:
         merged_from_fragments = merged_from_fragments or []
         turn_start = datetime.utcnow()
 
-        # 1. Load CRM
-        user_before = await self._crm.get_or_create_user(phone)
-
-        # Append incoming user message
-        await self._crm.append_message(
-            phone,
-            ConversationMessage(
-                role="user",
-                content=user_message,
-                media_urls=media_urls,
-                wa_message_id=wa_message_id,
-                turn_id=turn_id,
-                at=turn_start,
-            ),
-        )
-
-        # Reload to include the new message in history snapshot
-        user_for_planner = await self._crm.get_user(phone) or user_before
+        # 1. Load CRM — pre-turn snapshot. We deliberately do NOT
+        # pre-append the current user message; agents need to see the
+        # PRIOR conversation history so first-touch detection works.
+        # (User message is appended after the pipeline succeeds, below.)
+        user_for_planner = await self._crm.get_or_create_user(phone)
 
         bundle = TraceBundle(
             turn_id=turn_id,
@@ -163,6 +150,21 @@ class JessicaPipeline:
 
             # 5. Apply suggested CRM diffs from specialists
             user_after = _apply_specialist_diffs(user_for_planner, outputs)
+
+            # Append the inbound user message NOW (post-pipeline) so
+            # next turn's agents see it as prior history, but THIS turn's
+            # is_first_touch logic saw a clean pre-turn snapshot.
+            await self._crm.append_message(
+                phone,
+                ConversationMessage(
+                    role="user",
+                    content=user_message,
+                    media_urls=media_urls,
+                    wa_message_id=wa_message_id,
+                    turn_id=turn_id,
+                    at=turn_start,
+                ),
+            )
 
             # Append Jessica's reply to history (joined bubbles for storage)
             jessica_text = "\n\n".join(writer_output.bubbles)
