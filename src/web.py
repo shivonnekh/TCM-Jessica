@@ -1,23 +1,26 @@
 """FastAPI app — webhook receiver + trace viewer.
 
 Endpoints:
-    POST /webhook/chatdaddy   — incoming WhatsApp messages (stub)
+    POST /webhook/chatdaddy   — incoming WhatsApp messages (via router)
     GET  /trace/{turn_id}     — JSON dump of a turn trace
     GET  /trace               — list recent traces (HTML)
     GET  /health              — simple liveness probe
 
-NOTE: WhatsApp send path (ChatDaddy IM API client) is NOT yet ported.
-The webhook currently runs the pipeline and returns the bubbles in the
-response body — useful for local dev/curl testing.
+The ``/webhook/chatdaddy`` endpoint is owned by ``src.whatsapp.router``.
+For real ChatDaddy webhook traffic it does signature verification, dedup,
+group-gate, blocklist, buffer/merge, and dispatches to the pipeline in
+the background while returning 200 immediately. For dev / curl smoke
+tests it accepts a minimal ``{"phone","text"}`` body and runs the
+pipeline inline, returning the bubbles in the response.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
 from anthropic import AsyncAnthropic
 from fastapi import FastAPI, HTTPException, Request
@@ -27,6 +30,9 @@ from src.agents.registry import build_specialist_registry
 from src.crm.repo import CRMRepo
 from src.orchestrator.pipeline import JessicaPipeline
 from src.trace.writer import TraceWriter
+from src.whatsapp import client as wa_client
+from src.whatsapp.router import router as whatsapp_router
+from src.whatsapp.router import set_pipeline as set_wa_pipeline
 
 logger = logging.getLogger("web")
 
@@ -60,14 +66,42 @@ async def lifespan(app: FastAPI):
     app.state.trace_writer = trace_writer
     app.state.pipeline = pipeline
 
+    # Register the pipeline with the WhatsApp router so the webhook +
+    # poller can dispatch turns to it.
+    set_wa_pipeline(pipeline)
+
+    # Start background tasks — token refresh + (optional) polling fallback.
+    # Both are best-effort: if ChatDaddy credentials aren't configured we
+    # log a warning and continue (dev / smoke-test mode still works via
+    # the inline pipeline path).
+    background_tasks: list[asyncio.Task] = []
+    if os.environ.get("CHATDADDY_REFRESH_TOKEN"):
+        background_tasks.append(
+            asyncio.create_task(wa_client.start_token_refresh_loop())
+        )
+        if os.environ.get("WA_POLL_ENABLED", "true").lower() == "true":
+            # Import lazily so tests that don't touch the gateway can
+            # still import web.py without httpx round-trips at start.
+            from src.whatsapp.poller import start_polling_loop
+            background_tasks.append(asyncio.create_task(start_polling_loop()))
+    else:
+        logger.warning(
+            "CHATDADDY_REFRESH_TOKEN unset — outbound sends will fail. "
+            "Set it before exposing the webhook publicly."
+        )
+
     try:
         yield
     finally:
-        logger.info("shutdown: closing CRM")
+        logger.info("shutdown: closing CRM + background tasks")
+        for task in background_tasks:
+            task.cancel()
+        await wa_client.close()
         await crm.close()
 
 
 app = FastAPI(title="TCM-Jessica", version="0.1.0", lifespan=lifespan)
+app.include_router(whatsapp_router)
 
 
 # -------------------------------------------------------------------
@@ -78,37 +112,6 @@ app = FastAPI(title="TCM-Jessica", version="0.1.0", lifespan=lifespan)
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "tcm-jessica"}
-
-
-@app.post("/webhook/chatdaddy")
-async def chatdaddy_webhook(request: Request) -> JSONResponse:
-    """Stub webhook — accepts a minimal payload and runs one turn.
-
-    Real ChatDaddy webhook signature verification + buffer/merge will be
-    ported from dr-baba-agent/src/whatsapp/router.py later.
-    """
-    body: dict[str, Any] = await request.json()
-    phone = body.get("phone") or body.get("from")
-    text = body.get("text") or body.get("message") or ""
-    media_urls = body.get("media_urls", [])
-
-    if not phone or not text:
-        raise HTTPException(status_code=400, detail="missing phone or text")
-
-    pipeline: JessicaPipeline = request.app.state.pipeline
-    result = await pipeline.run_turn(
-        phone=phone,
-        user_message=text,
-        media_urls=media_urls,
-    )
-
-    return JSONResponse(
-        {
-            "turn_id": result.turn_id,
-            "bubbles": result.writer_output.bubbles,
-            "trace_url": f"/trace/{result.turn_id}",
-        }
-    )
 
 
 @app.get("/trace/{turn_id}")

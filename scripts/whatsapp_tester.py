@@ -13,6 +13,7 @@ Usage:
 import asyncio
 import json
 import os
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,7 @@ CHROME_PROFILE_DIR = os.path.expanduser(
     "~/Library/Application Support/Google/Chrome"
 )
 CHROME_PROFILE = "Default"          # shivonnekhoo@gmail.com
+CHROME_DEBUG_PORT = 9222
 LOG_DIR = Path(__file__).parent.parent / "data" / "test_logs"
 MAX_TURNS = 20                       # safety cap
 SILENCE_WINDOW = 4.0                 # seconds of no new msgs = agent done sending
@@ -192,6 +194,43 @@ def patient_reply(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+TEMP_PROFILE_DIR = "/tmp/chrome-wa-test"
+
+
+def launch_chrome_with_debug() -> subprocess.Popen:
+    """
+    Copy the real Chrome Default profile to a temp dir, then launch Chrome
+    with remote debugging. Chrome refuses --remote-debugging-port on its own
+    default data dir, but allows it on any other path.
+    """
+    import shutil
+
+    chrome_bin = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    src = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default")
+
+    print(f"\n📋 Copying Chrome profile to {TEMP_PROFILE_DIR}…")
+    if os.path.exists(TEMP_PROFILE_DIR):
+        shutil.rmtree(TEMP_PROFILE_DIR)
+    os.makedirs(f"{TEMP_PROFILE_DIR}/Default", exist_ok=True)
+    shutil.copytree(src, f"{TEMP_PROFILE_DIR}/Default", dirs_exist_ok=True)
+    print(f"   Done.")
+
+    cmd = [
+        chrome_bin,
+        f"--remote-debugging-port={CHROME_DEBUG_PORT}",
+        "--profile-directory=Default",
+        f"--user-data-dir={TEMP_PROFILE_DIR}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--start-maximized",
+        "https://web.whatsapp.com",
+    ]
+    print(f"🚀 Launching Chrome with debug port {CHROME_DEBUG_PORT}…")
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"   Chrome PID: {proc.pid}")
+    return proc
+
+
 async def main() -> None:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     client = anthropic.Anthropic(api_key=api_key) if api_key else None
@@ -200,36 +239,54 @@ async def main() -> None:
 
     log_file, conversation = setup_log()
 
+    # Chrome is already running (launched manually or by previous run).
+    # Just connect to it.
     async with async_playwright() as p:
-        print("\n🚀 Launching Chrome with your existing profile…")
-        print("   (Chrome must be fully closed first)")
+        print(f"\n🔌 Connecting to Chrome via CDP (port {CHROME_DEBUG_PORT})…")
+        # Retry a few times in case Chrome needs a moment
+        browser = None
+        for attempt in range(6):
+            try:
+                browser = await p.chromium.connect_over_cdp(
+                    f"http://127.0.0.1:{CHROME_DEBUG_PORT}"
+                )
+                break
+            except Exception:
+                print(f"   Attempt {attempt + 1}/6 — waiting…")
+                await asyncio.sleep(3)
 
-        # Use the real Chrome with your existing profile — no QR scan needed
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=CHROME_PROFILE_DIR,
-            channel="chrome",
-            headless=False,
-            args=[
-                f"--profile-directory={CHROME_PROFILE}",
-                "--start-maximized",
-                "--no-first-run",
-                "--no-default-browser-check",
-            ],
-            viewport={"width": 1400, "height": 900},
-        )
-
-        page = await context.new_page()
-        await page.goto("https://web.whatsapp.com")
-
-        print("\n⏳ Loading WhatsApp Web…")
-        try:
-            # Wait for WhatsApp to load (search box = fully loaded)
-            await page.wait_for_selector('input[data-tab="3"]', timeout=60_000)
-            print("✅ WhatsApp Web loaded (already logged in!)")
-        except Exception:
-            print("❌ WhatsApp Web didn't load in time. Make sure Chrome was closed first.")
-            await context.close()
+        if not browser:
+            print("❌ Could not connect to Chrome. Make sure it launched correctly.")
             return
+
+        print("✅ Connected!")
+
+        # Find the WhatsApp tab or open a new one
+        context = browser.contexts[0] if browser.contexts else await browser.new_context()
+
+        # Look for existing WhatsApp tab
+        wa_page = None
+        for pg in context.pages:
+            if "whatsapp" in pg.url:
+                wa_page = pg
+                break
+
+        if wa_page:
+            print("   Found existing WhatsApp tab.")
+            page = wa_page
+            await page.bring_to_front()
+        else:
+            print("   Opening WhatsApp Web in new tab…")
+            page = await context.new_page()
+            await page.goto("https://web.whatsapp.com")
+
+        print("\n⏳ Waiting for WhatsApp Web to load…")
+        try:
+            await page.wait_for_selector('input[data-tab="3"]', timeout=60_000)
+            print("✅ WhatsApp Web ready!")
+        except Exception:
+            print("⚠️  Slow load — waiting longer (may need QR scan)…")
+            await page.wait_for_selector('input[data-tab="3"]', timeout=120_000)
 
         await asyncio.sleep(1.5)
 
@@ -295,7 +352,7 @@ async def main() -> None:
         print("=" * 60)
         print("\n🔓 Browser staying open 90s — review the chat then close manually.")
         await asyncio.sleep(90)
-        await context.close()
+        await browser.close()
 
 
 if __name__ == "__main__":
