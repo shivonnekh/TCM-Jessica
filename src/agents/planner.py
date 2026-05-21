@@ -67,6 +67,14 @@ _SYSTEM_TEMPLATE = """你係 Jessica 嘅 Planner — 一個路由 brain。
 3. 用戶問知識問題 + 同時想預約 → [faq, appointment] mode=parallel
 4. 體質剛診斷完 (status=constitution_done + 用戶仲想繼續) → [constitution, sales] mode=sequential，或者直接 sales solo
 5. 用戶 confirm 已 propose 嘅 appointment slot → appointment solo (Phase 4)
+6. 用戶問「免費 / 唔使錢 / 自己煮 / 食譜 / DIY / 點煲 / 邊度有得買材料」→
+   FAQ solo (KB 有 128 款免費 HK 中醫師家用湯水食譜)。重要：剛 pitch 完
+   付費產品唔代表所有後續問題都 route 去 Sales — 用戶 reject 咗付費就要
+   俾佢免費 alternatives。
+7. 用戶問「點煮 / 材料 / 做法 / 啲咩用 / 邊度買到」+ 任何湯水/食物 名 →
+   FAQ solo (KB 有食譜詳情)
+8. 用戶問「邊款」「點解」「乜嘢」「邊度」「幾耐」嘅知識問題（同時冇預約意向）
+   → FAQ solo
 
 Proactive hints (soft):
 - status=constitution_done 但 products_pitched 空 → 寫 proactive_hint="ready_for_pitch"
@@ -203,6 +211,20 @@ def _rule_overrides(
             reasoning="rule: first-touch greeting",
         )
 
+    # User explicitly wants free / DIY content → KB lookup, NOT Sales.
+    # Even if last turn was a Sales pitch — they may be rejecting paid
+    # options and want free alternatives.
+    if _wants_free_or_diy(user_message):
+        return PlannerDecision(
+            specialists=[SpecialistName.FAQ],
+            mode="solo",
+            reasoning="rule: user wants free / DIY recipes → KB lookup",
+            notes_for_writer=(
+                "用戶想要免費 / 自己煮嘅選擇。記住我哋 KB 有 128 款香港中醫師"
+                "publish 嘅家用食譜。唔好講「冇免費」之類嘅錯嘢。"
+            ),
+        )
+
     # First-touch BUT user already mentioned a symptom in their opening
     # message → compact intro PLUS Constitution Agent on the same turn,
     # so we don't ask "what's bothering you?" after the user already
@@ -238,6 +260,22 @@ def _user_has_complaint_lite(text: str) -> bool:
     if not text:
         return False
     return any(kw in text for kw in _COMPLAINT_KEYWORDS_LITE)
+
+
+# Phrases that signal "user wants the FREE / DIY path" — must route to FAQ
+# regardless of prior turn's context, since the KB has 128 free recipes.
+_FREE_DIY_KEYWORDS = (
+    "免費", "免费", "唔使錢", "唔使钱", "不要錢", "不要钱", "免錢", "免钱",
+    "自己煮", "自己煲", "DIY", "食譜", "食谱", "點煮", "点煮", "點煲", "点煲",
+    "材料邊度買", "材料邊度有", "邊度有得買材料", "邊度可以買到材料",
+    "可唔可以自己整", "可以自己整嗎", "屋企可以煮嗎", "屋企整",
+)
+
+
+def _wants_free_or_diy(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _FREE_DIY_KEYWORDS)
 
 
 # -------------------------------------------------------------------
