@@ -45,6 +45,7 @@ from src.crm.models import Constitution, UserStatus
 from src.tools.kb_index import KBIndex
 from src.tools.kb_search import KBSearch
 from src.tools.product_catalog import ProductCatalog
+from src.tools.recipe_extractor import RecipeExtractor, recipe_to_dict
 
 logger = logging.getLogger("agents.constitution")
 
@@ -147,6 +148,7 @@ class ConstitutionAgent:
         self._catalog = catalog or ProductCatalog()
         self._kb = kb_index or KBIndex.load()
         self._kb_search = KBSearch(self._kb)
+        self._recipes = RecipeExtractor()
         self._vision_model = vision_model
         self._max_vision_tokens = max_vision_tokens
 
@@ -219,15 +221,16 @@ class ConstitutionAgent:
             # Planner routes to Sales then.
             free_recipes = self._search_free_recipes(constitution)
             for hit in free_recipes:
-                if hit["card_id"] not in cards_used:
-                    cards_used.append(hit["card_id"])
+                src = hit.get("source_card", "")
+                if src and src not in cards_used:
+                    cards_used.append(src)
             tools_called.append(
                 {
-                    "name": "KBSearch.free_recipes",
+                    "name": "RecipeExtractor.free_recipes",
                     "args": {"constitution": constitution.value},
                     "result": {
                         "count": len(free_recipes),
-                        "cards": [r["card_id"] for r in free_recipes],
+                        "titles": [r.get("title", "") for r in free_recipes],
                     },
                 }
             )
@@ -261,29 +264,18 @@ class ConstitutionAgent:
     def _search_free_recipes(
         self, constitution: Constitution
     ) -> list[dict[str, Any]]:
-        """Find 2-3 free home-cooking recipes from KB matching constitution."""
-        queries = [
-            f"{constitution.value} 湯水",
-            f"{constitution.value} 食療",
-        ]
-        seen: set[str] = set()
-        out: list[dict[str, Any]] = []
-        for q in queries:
-            for hit in self._kb_search.search(q, top_k=3, min_score=3.0):
-                if hit.card.card_id in seen:
-                    continue
-                seen.add(hit.card.card_id)
-                out.append(
-                    {
-                        "card_id": hit.card.card_id,
-                        "title": hit.card.title,
-                        "excerpt": hit.card.short_excerpt,
-                        "next_best_question": hit.card.next_best_question or "",
-                    }
-                )
-                if len(out) >= 3:
-                    return out
-        return out
+        """Get NAMED free recipes matching the constitution.
+
+        Uses RecipeExtractor which parses structured supporting_points
+        from soup KB cards (HK doctor recipes + healthy-food.hk top 100).
+        Each entry has title / url / image_url / constitutions.
+        """
+        recipes = self._recipes.for_constitution(constitution.value, limit=3)
+        if not recipes:
+            # Constitution wasn't in any recipe's constitutions list —
+            # fall back to popular recipes.
+            recipes = self._recipes.popular(limit=3)
+        return [recipe_to_dict(r) for r in recipes]
 
     # ─────────────────────────────────────────────────────────────
     # Tongue vision

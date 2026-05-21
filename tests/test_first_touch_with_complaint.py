@@ -88,8 +88,9 @@ def test_planner_first_touch_pure_hi_routes_to_greeting_only() -> None:
     assert decision.mode == "solo"
 
 
-def test_planner_returning_user_with_symptom_skips_rule() -> None:
-    """For returning users we let the LLM Planner decide — they're past intro."""
+def test_planner_returning_user_with_skin_symptom_routes_to_sales() -> None:
+    """Returning user with skin complaint → Sales (ointments-first) rule
+    fires (was None before _has_skin_condition was added 2026-05-21)."""
     from datetime import datetime
 
     from src.crm.models import ConversationMessage
@@ -102,4 +103,6 @@ def test_planner_returning_user_with_symptom_skips_rule() -> None:
         ],
     )
     decision = _rule_overrides(user, "我皮膚痕癢", [])
-    assert decision is None
+    assert decision is not None
+    assert decision.specialists == [SpecialistName.SALES]
+    assert decision.mode == "solo"

@@ -269,6 +269,22 @@ def _rule_overrides(
             ),
         )
 
+    # User mentions skin condition (痕/癢/濕疹/暗瘡/痘) → Sales (ointments)
+    # first. These are conditions we have specific products for. We
+    # still let Planner route to Constitution on its own merits later;
+    # this rule fires when buying intent is implicit in the complaint.
+    if _has_skin_condition(user_message) and user.status != UserStatus.NEW:
+        return PlannerDecision(
+            specialists=[SpecialistName.SALES],
+            mode="solo",
+            reasoning="rule: skin condition → ointments-first sales",
+            notes_for_writer=(
+                "用戶提到皮膚問題（痕/癢/濕疹/暗瘡/痘）。我哋有 3 款藥膏專門針對："
+                "茶樹綠豆濕敏膏 $90, 蛋黃油乳液 $120, 止痕濕疹膏 $180。"
+                "直接列晒，唔好繞去湯水或者體質評估。"
+            ),
+        )
+
     # User asks for "other options / alternatives" → enumerate all
     # solution tracks (soups + ointments + clinic + recipes).
     if _wants_alternatives(user_message):
@@ -397,6 +413,21 @@ def _wants_alternatives(text: str) -> bool:
     if not text:
         return False
     return any(kw in text for kw in _ALTERNATIVES_INTENT_KEYWORDS)
+
+
+# Skin-specific symptom keywords — we have 3 specific ointments for these
+_SKIN_CONDITION_KEYWORDS = (
+    "皮膚痕", "皮肤痒", "皮肤痕", "痕癢", "痒",
+    "濕疹", "湿疹", "暗瘡", "暗疮", "痘痘", "暗瘡",
+    "敏感肌", "蚊咬", "皮膚問題", "皮肤问题",
+    "皮膚紅", "皮肤红", "起紅疹", "起红疹",
+)
+
+
+def _has_skin_condition(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _SKIN_CONDITION_KEYWORDS)
 
 
 # -------------------------------------------------------------------

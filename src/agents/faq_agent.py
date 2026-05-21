@@ -29,8 +29,10 @@ from typing import Any
 from src.llm import LLMClient
 
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
+from src.crm.models import Constitution
 from src.tools.kb_index import KBIndex
 from src.tools.kb_search import KBSearch, SearchHit
+from src.tools.recipe_extractor import RecipeExtractor, recipe_to_dict
 
 logger = logging.getLogger("agents.faq")
 
@@ -76,11 +78,46 @@ class FAQAgent:
     ) -> None:
         self._kb = kb_index or KBIndex.load()
         self._search = KBSearch(self._kb)
+        self._recipes = RecipeExtractor()
         self._client = client
         self._model = model
         self._max_tokens = max_tokens
 
     async def run(self, inp: SpecialistInput) -> tuple[SpecialistOutput, dict[str, Any]]:
+        # FAST PATH: user asks for soup recipes / list → extract NAMED
+        # recipes from KB, not abstract card titles. Bypasses LLM.
+        if _wants_recipes(inp.user_message):
+            recipes = self._pick_recipes_for_user(inp.user)
+            if recipes:
+                payload = {
+                    "answer_facts": [],
+                    "named_recipes": [recipe_to_dict(r) for r in recipes],
+                    "confidence": 0.9,
+                    "next_best_question": (
+                        "想我幫你按你嘅體質揀啱嘅食譜？發張脷相 + 答 4 題我幫你睇"
+                    ),
+                    "no_match": False,
+                    "intent": "list_recipes",
+                }
+                return SpecialistOutput(
+                    specialist=SpecialistName.FAQ,
+                    payload=payload,
+                    cards_used=list({r.source_card for r in recipes}),
+                    tools_called=[
+                        {
+                            "name": "RecipeExtractor.pick",
+                            "args": {
+                                "constitution": inp.user.constitution.value
+                                if inp.user.constitution else None,
+                            },
+                            "result": {
+                                "count": len(recipes),
+                                "titles": [r.title for r in recipes],
+                            },
+                        }
+                    ],
+                ), {"model": "no_llm_recipes", "input_tokens": 0, "output_tokens": 0}
+
         hits = self._search.search(inp.user_message, top_k=3, min_score=3.0)
 
         if not hits:
@@ -165,10 +202,34 @@ class FAQAgent:
         }
         return output, usage
 
+    def _pick_recipes_for_user(self, user: Any) -> list:
+        """Pick recipes matching user's constitution (if known) else popular."""
+        if user.constitution and user.constitution != Constitution.UNKNOWN:
+            r = self._recipes.for_constitution(user.constitution.value, limit=4)
+            if r:
+                return r
+        return self._recipes.popular(limit=4)
+
 
 # -------------------------------------------------------------------
 # Helpers
 # -------------------------------------------------------------------
+
+
+# Phrases that signal user wants ACTUAL recipe list, not abstract knowledge.
+_RECIPE_LIST_KEYWORDS = (
+    "什么湯水", "什么汤水", "邊款湯", "邊款湯水", "邊款好", "哪些汤",
+    "什麼食譜", "什么食谱", "邊款食譜", "邊款食谱", "what soup",
+    "推介", "推薦", "推荐", "邊款好飲", "有咩湯", "有咩食譜",
+    "邊個食譜", "點揀湯", "食譜咩", "推介食譜", "湯水有咩",
+    "汤水有什么", "食譜有咩", "你都没有发我", "你都冇發我",
+)
+
+
+def _wants_recipes(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _RECIPE_LIST_KEYWORDS)
 
 
 def _build_extract_prompt(query: str, hits: list[SearchHit]) -> str:
