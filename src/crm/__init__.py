@@ -14,6 +14,7 @@ from src.crm.models import (
     UserStatus,
 )
 from src.crm.repo import CRMRepo
+from src.crm.repo_factory import open_crm_repo
 
 __all__ = [
     "AppointmentRecord",

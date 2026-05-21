@@ -27,7 +27,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.agents.registry import build_specialist_registry
-from src.crm.repo import CRMRepo
+from src.crm.repo_factory import open_crm_repo, resolve_database_url
 from src.llm import LLMClient
 from src.orchestrator.pipeline import JessicaPipeline
 from src.trace.writer import TraceWriter
@@ -38,7 +38,7 @@ from src.whatsapp.router import set_pipeline as set_wa_pipeline
 logger = logging.getLogger("web")
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = os.environ.get("DATABASE_PATH", str(ROOT / "data" / "jessica.db"))
+DB_URL = resolve_database_url(str(ROOT / "data" / "jessica.db"))
 TRACE_DIR = os.environ.get("TRACE_DIR", str(ROOT / "traces"))
 MEDIA_DIR = ROOT / "data" / "media"
 
@@ -50,9 +50,12 @@ MEDIA_DIR = ROOT / "data" / "media"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("startup: connecting CRM at %s", DB_PATH)
-    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    crm = await CRMRepo.connect(DB_PATH)
+    masked = DB_URL[:20] + "…" if len(DB_URL) > 25 else DB_URL
+    logger.info("startup: connecting CRM at %s", masked)
+    # For SQLite paths, ensure parent dir exists. Postgres URLs skip this.
+    if not DB_URL.startswith(("postgres://", "postgresql://")):
+        Path(DB_URL).parent.mkdir(parents=True, exist_ok=True)
+    crm = await open_crm_repo(DB_URL)
     trace_writer = TraceWriter(TRACE_DIR)
 
     client = LLMClient()  # OpenAI under the hood, picks up OPENAI_API_KEY
