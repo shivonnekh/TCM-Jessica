@@ -177,6 +177,17 @@ class JessicaPipeline:
             )
 
             await self._crm.save_user(user_after)
+
+            # New appointments live in a separate table — save_user
+            # doesn't touch it. Detect appointments that appeared via
+            # the _append diff and persist them now.
+            new_appointments = [
+                a for a in user_after.appointments
+                if a not in user_for_planner.appointments
+            ]
+            for appt in new_appointments:
+                await self._crm.add_appointment(phone, appt)
+
             bundle.crm_diff = _diff_user(user_for_planner, user_after)
 
         except Exception as exc:  # noqa: BLE001

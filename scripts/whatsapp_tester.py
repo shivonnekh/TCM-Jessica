@@ -145,60 +145,93 @@ async def send_image(page, image_path: str) -> None:
     print("   Image sent.")
 
 
-async def get_incoming_texts(page) -> list[str]:
-    """Return all visible incoming message texts (agent bubbles).
-    Uses page.evaluate() for atomic DOM access — avoids stale locator issues.
+async def get_last_incoming_id(page) -> str:
+    """Return the data-id of the most recent incoming message bubble.
+    data-id lives on an ANCESTOR of message-in (3 levels up), not a child.
     """
-    raw_texts: list[str] = await page.evaluate("""() => {
-        const msgs = document.querySelectorAll('div[class*="message-in"]');
-        return Array.from(msgs)
-            .map(el => el.innerText.trim())
-            .filter(t => t.length > 2);
+    return await page.evaluate("""() => {
+        const msgIns = document.querySelectorAll('div[class*="message-in"]');
+        if (!msgIns.length) return '';
+        const lastIn = msgIns[msgIns.length - 1];
+        // Walk up to find the data-id ancestor
+        let el = lastIn.parentElement;
+        for (let i = 0; i < 8; i++) {
+            if (!el) break;
+            const id = el.getAttribute('data-id');
+            if (id) return id;
+            el = el.parentElement;
+        }
+        return '';
     }""")
-    return raw_texts
+
+
+async def get_new_incoming_texts(page, after_id: str) -> list[str]:
+    """Return text of all incoming messages that appeared after `after_id`."""
+    return await page.evaluate("""(afterId) => {
+        const all = Array.from(document.querySelectorAll('div[data-id]'));
+        let collecting = (afterId === '');
+        const result = [];
+        for (const el of all) {
+            const id = el.getAttribute('data-id') || '';
+            if (!collecting && id === afterId) { collecting = true; continue; }
+            if (!collecting) continue;
+            if (el.closest('div[class*="message-in"]')) {
+                const text = el.innerText.trim();
+                if (text.length > 2) result.push(text);
+            }
+        }
+        return result;
+    }""", after_id)
 
 
 async def wait_for_agent_burst(
     page,
-    baseline_count: int,
+    last_id: str,
     first_timeout: int = 90,
     silence: float = SILENCE_WINDOW,
-) -> tuple[str | None, int]:
+) -> tuple[str | None, str]:
     """
-    Wait for the agent to finish sending its turn (may be multiple bubbles).
-    Strategy:
-      1. Wait up to `first_timeout` s for the first new message.
-      2. Once the first arrives, keep collecting for `silence` seconds of no new msgs.
-      3. Return combined text + new baseline count.
+    Wait for the agent to finish its turn.
+    Tracks by data-id of the last message, not by count.
+    Returns (combined_text, new_last_id).
     """
-    deadline = time.time() + first_timeout
-    first_arrived = False
+    # Step 1: wait for a new incoming message (id different from last_id)
+    try:
+        escaped = last_id.replace("'", "\\'")
+        await page.wait_for_function(
+            f"""() => {{
+                const msgs = document.querySelectorAll('div[data-id]');
+                let lastIn = '';
+                msgs.forEach(el => {{
+                    if (el.closest('div[class*="message-in"]'))
+                        lastIn = el.getAttribute('data-id') || '';
+                }});
+                return lastIn !== '' && lastIn !== '{escaped}';
+            }}""",
+            timeout=first_timeout * 1000,
+            polling=800,
+        )
+        print("   ↳ First reply received, collecting burst…")
+    except Exception:
+        print("⏰ Timeout — no reply received.")
+        return None, last_id
+
+    # Step 2: wait for silence (no new messages for `silence` seconds)
     last_change_time = time.time()
-    current_count = baseline_count
+    current_id = await get_last_incoming_id(page)
 
     while True:
-        texts = await get_incoming_texts(page)
-        new_count = len(texts)
-
-        if new_count > current_count:
-            current_count = new_count
-            last_change_time = time.time()
-            if not first_arrived:
-                first_arrived = True
-                print(f"   ↳ First reply received, collecting burst…")
-
-        if first_arrived:
-            # Once we have messages, wait for silence window
-            if time.time() - last_change_time >= silence:
-                new_texts = texts[baseline_count:]
-                combined = "\n".join(t.strip() for t in new_texts if t.strip())
-                return combined, current_count
-
-        elif time.time() > deadline:
-            print("⏰ Timeout — no reply received.")
-            return None, current_count
-
         await asyncio.sleep(0.8)
+        new_id = await get_last_incoming_id(page)
+        if new_id != current_id:
+            current_id = new_id
+            last_change_time = time.time()
+        elif time.time() - last_change_time >= silence:
+            break
+
+    texts = await get_new_incoming_texts(page, last_id)
+    combined = "\n".join(t.strip() for t in texts if t.strip())
+    return combined, current_id
 
 
 # ── AI patient reply ──────────────────────────────────────────────────────────
@@ -277,68 +310,92 @@ async def main() -> None:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     client = anthropic.Anthropic(api_key=api_key) if api_key else None
     if not client:
-        print("⚠️  ANTHROPIC_API_KEY missing — patient replies will be static fallback.")
+        print("⚠️  ANTHROPIC_API_KEY missing — replies will be static fallback.")
 
     log_file, conversation = setup_log()
 
+    # ── Launch real Chrome off-screen ─────────────────────────────────────────
+    # Off-screen = no focus stealing. Real Chrome = proper WA WebSocket.
+    chrome_bin = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    print("🚀 Launching Chrome off-screen with copied profile…")
+    chrome_proc = subprocess.Popen(
+        [
+            chrome_bin,
+            f"--remote-debugging-port={CHROME_DEBUG_PORT}",
+            f"--user-data-dir={TEMP_PROFILE_DIR}",
+            "--profile-directory=Default",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--window-position=10000,0",  # off-screen — you won't see it
+            "--window-size=1400,900",
+            "https://web.whatsapp.com",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    print(f"   Chrome PID: {chrome_proc.pid}")
+    await asyncio.sleep(5)
+
     async with async_playwright() as p:
-        print("\n🚀 Launching headless Chromium with copied profile…")
+        print(f"🔌 Connecting via CDP (port {CHROME_DEBUG_PORT})…")
+        browser = None
+        for attempt in range(8):
+            try:
+                browser = await p.chromium.connect_over_cdp(
+                    f"http://127.0.0.1:{CHROME_DEBUG_PORT}"
+                )
+                break
+            except Exception:
+                print(f"   Attempt {attempt + 1}/8 — retrying…")
+                await asyncio.sleep(2)
 
-        # Use the profile copy we already made at /tmp/chrome-wa-test
-        # headless=True = no visible window, no focus stealing
-        # Use system Chrome (not bundled Chromium) so WhatsApp Web
-        # recognises the browser version. headless=True = no window.
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=TEMP_PROFILE_DIR,
-            channel="chrome",
-            headless=True,
-            args=[
-                "--profile-directory=Default",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        )
+        if not browser:
+            print("❌ Could not connect to Chrome.")
+            chrome_proc.terminate()
+            return
 
-        page = await context.new_page()
-        await page.goto("https://web.whatsapp.com")
+        print("✅ Connected!")
+        context = browser.contexts[0] if browser.contexts else await browser.new_context()
+        wa_page = next((pg for pg in context.pages if "whatsapp" in pg.url), None)
+        page = wa_page if wa_page else await context.new_page()
+        if not wa_page:
+            await page.goto("https://web.whatsapp.com")
 
         print("⏳ Waiting for WhatsApp Web to load…")
         try:
             await page.wait_for_selector('input[data-tab="3"]', timeout=90_000)
-            print("✅ WhatsApp Web ready (headless — no window)!")
+            print("✅ WhatsApp Web ready!")
         except Exception:
-            # Session might have expired — save screenshot for debug
-            await page.screenshot(path="/tmp/wa_headless_debug.png")
-            print("❌ WhatsApp didn't load. Screenshot: /tmp/wa_headless_debug.png")
-            print("   Session may have expired — need to re-login with visible Chrome.")
-            await context.close()
+            await page.screenshot(path="/tmp/wa_debug.png")
+            print("❌ WhatsApp didn't load — screenshot: /tmp/wa_debug.png")
+            await browser.close()
+            chrome_proc.terminate()
             return
 
         await asyncio.sleep(1.5)
 
-        # Open the agent chat
         if not await open_chat(page, AGENT_NUMBER):
-            await context.close()
+            await browser.close()
+            chrome_proc.terminate()
             return
 
-        # ── Wait for chat history to fully load, then lock baseline ─────────────
-        print("⏳ Letting chat history settle (3s)…")
-        await asyncio.sleep(3)
-        baseline = len(await get_incoming_texts(page))
+        # ── Baseline: wait for chat history to stabilise ─────────────────────
+        print("⏳ Letting chat history settle (4s)…")
+        await asyncio.sleep(4)
+        last_id = await get_last_incoming_id(page)
         await asyncio.sleep(2)
-        check = len(await get_incoming_texts(page))
-        if check != baseline:
+        check_id = await get_last_incoming_id(page)
+        if check_id != last_id:
             await asyncio.sleep(3)
-            baseline = len(await get_incoming_texts(page))
-        print(f"   Baseline locked at {baseline} messages.")
+            last_id = await get_last_incoming_id(page)
+        print(f"   Baseline: last id = …{last_id[-16:] if last_id else 'none'}")
 
         # ── Fixed opening sequence ────────────────────────────────────────────
         for opener in FIXED_OPENERS:
             await send(page, opener)
             log_msg(conversation, "patient", opener)
-            print(f"\n⏳ Waiting for agent response…")
-            reply_text, baseline = await wait_for_agent_burst(page, baseline)
+            print("\n⏳ Waiting for agent response…")
+            reply_text, last_id = await wait_for_agent_burst(page, last_id)
             if reply_text:
                 log_msg(conversation, "agent", reply_text)
             await asyncio.sleep(REPLY_PAUSE)
@@ -346,7 +403,7 @@ async def main() -> None:
         # ── Dynamic conversation loop ─────────────────────────────────────────
         for turn in range(MAX_TURNS):
             print(f"\n⏳ [{turn + 1}/{MAX_TURNS}] Waiting for agent burst…")
-            reply_text, baseline = await wait_for_agent_burst(page, baseline)
+            reply_text, last_id = await wait_for_agent_burst(page, last_id)
 
             if not reply_text:
                 print("🛑 No reply — ending test.")
@@ -354,7 +411,6 @@ async def main() -> None:
 
             log_msg(conversation, "agent", reply_text)
 
-            # Detect natural end of conversation
             end_signals = ["再見", "bye", "appointment confirmed", "預約成功", "感謝你", "thank you"]
             if any(sig.lower() in reply_text.lower() for sig in end_signals):
                 print("\n✅ Conversation reached a natural end.")
@@ -362,7 +418,6 @@ async def main() -> None:
 
             await asyncio.sleep(REPLY_PAUSE)
 
-            # If agent is asking for tongue photo, send the image
             asking_for_tongue = any(
                 sig.lower() in reply_text.lower() for sig in TONGUE_REQUEST_SIGNALS
             )
@@ -370,11 +425,7 @@ async def main() -> None:
                 await send_image(page, TONGUE_IMAGE)
                 log_msg(conversation, "patient", "[sent tongue photo]")
             else:
-                # Generate and send patient reply
-                if client:
-                    p_reply = patient_reply(client, conversation, reply_text)
-                else:
-                    p_reply = "好的，請繼續"
+                p_reply = patient_reply(client, conversation, reply_text) if client else "好的，請繼續"
                 await send(page, p_reply)
                 log_msg(conversation, "patient", p_reply)
 
@@ -386,8 +437,9 @@ async def main() -> None:
         print("  2. Agent recommended products?")
         print("  3. Agent led to appointment booking?")
         print("=" * 60)
-        print("\n✅ Test complete. Closing headless browser.")
-        await context.close()
+        print("\n✅ Done. Closing Chrome.")
+        await browser.close()
+        chrome_proc.terminate()
 
 
 if __name__ == "__main__":
