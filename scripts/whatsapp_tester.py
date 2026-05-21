@@ -92,7 +92,7 @@ async def open_chat(page, number: str) -> bool:
 
     # Click the first result
     try:
-        first_result = page.locator('div[role="listitem"]').first
+        first_result = page.locator('[data-testid="cell-frame-container"]').first
         await first_result.wait_for(timeout=8_000)
         await first_result.click()
         await asyncio.sleep(1.5)
@@ -117,10 +117,16 @@ async def send(page, text: str) -> None:
 
 
 async def get_incoming_texts(page) -> list[str]:
-    """Return all visible incoming message texts."""
-    return await page.locator(
-        'div.message-in span.selectable-text span'
-    ).all_inner_texts()
+    """Return all visible incoming message texts (agent bubbles).
+    Uses page.evaluate() for atomic DOM access — avoids stale locator issues.
+    """
+    raw_texts: list[str] = await page.evaluate("""() => {
+        const msgs = document.querySelectorAll('div[class*="message-in"]');
+        return Array.from(msgs)
+            .map(el => el.innerText.trim())
+            .filter(t => t.length > 2);
+    }""")
+    return raw_texts
 
 
 async def wait_for_agent_burst(
@@ -239,54 +245,39 @@ async def main() -> None:
 
     log_file, conversation = setup_log()
 
-    # Chrome is already running (launched manually or by previous run).
-    # Just connect to it.
     async with async_playwright() as p:
-        print(f"\n🔌 Connecting to Chrome via CDP (port {CHROME_DEBUG_PORT})…")
-        # Retry a few times in case Chrome needs a moment
-        browser = None
-        for attempt in range(6):
-            try:
-                browser = await p.chromium.connect_over_cdp(
-                    f"http://127.0.0.1:{CHROME_DEBUG_PORT}"
-                )
-                break
-            except Exception:
-                print(f"   Attempt {attempt + 1}/6 — waiting…")
-                await asyncio.sleep(3)
+        print("\n🚀 Launching headless Chromium with copied profile…")
 
-        if not browser:
-            print("❌ Could not connect to Chrome. Make sure it launched correctly.")
-            return
+        # Use the profile copy we already made at /tmp/chrome-wa-test
+        # headless=True = no visible window, no focus stealing
+        # Use system Chrome (not bundled Chromium) so WhatsApp Web
+        # recognises the browser version. headless=True = no window.
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir=TEMP_PROFILE_DIR,
+            channel="chrome",
+            headless=True,
+            args=[
+                "--profile-directory=Default",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-blink-features=AutomationControlled",
+            ],
+        )
 
-        print("✅ Connected!")
+        page = await context.new_page()
+        await page.goto("https://web.whatsapp.com")
 
-        # Find the WhatsApp tab or open a new one
-        context = browser.contexts[0] if browser.contexts else await browser.new_context()
-
-        # Look for existing WhatsApp tab
-        wa_page = None
-        for pg in context.pages:
-            if "whatsapp" in pg.url:
-                wa_page = pg
-                break
-
-        if wa_page:
-            print("   Found existing WhatsApp tab.")
-            page = wa_page
-            await page.bring_to_front()
-        else:
-            print("   Opening WhatsApp Web in new tab…")
-            page = await context.new_page()
-            await page.goto("https://web.whatsapp.com")
-
-        print("\n⏳ Waiting for WhatsApp Web to load…")
+        print("⏳ Waiting for WhatsApp Web to load…")
         try:
-            await page.wait_for_selector('input[data-tab="3"]', timeout=60_000)
-            print("✅ WhatsApp Web ready!")
+            await page.wait_for_selector('input[data-tab="3"]', timeout=90_000)
+            print("✅ WhatsApp Web ready (headless — no window)!")
         except Exception:
-            print("⚠️  Slow load — waiting longer (may need QR scan)…")
-            await page.wait_for_selector('input[data-tab="3"]', timeout=120_000)
+            # Session might have expired — save screenshot for debug
+            await page.screenshot(path="/tmp/wa_headless_debug.png")
+            print("❌ WhatsApp didn't load. Screenshot: /tmp/wa_headless_debug.png")
+            print("   Session may have expired — need to re-login with visible Chrome.")
+            await context.close()
+            return
 
         await asyncio.sleep(1.5)
 
@@ -350,9 +341,8 @@ async def main() -> None:
         print("  2. Agent recommended products?")
         print("  3. Agent led to appointment booking?")
         print("=" * 60)
-        print("\n🔓 Browser staying open 90s — review the chat then close manually.")
-        await asyncio.sleep(90)
-        await browser.close()
+        print("\n✅ Test complete. Closing headless browser.")
+        await context.close()
 
 
 if __name__ == "__main__":

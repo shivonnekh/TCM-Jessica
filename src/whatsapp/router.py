@@ -31,6 +31,7 @@ What was removed:
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import os
 import sys
@@ -62,6 +63,16 @@ router = APIRouter(tags=["whatsapp"])
 
 WEBHOOK_SECRET = os.environ.get("CHATDADDY_WEBHOOK_SECRET", "")
 DEFAULT_ACCOUNT_ID = os.environ.get("CHATDADDY_ACCOUNT_ID", "")
+
+# Production guard — when APP_ENV=production, the webhook MUST have a secret
+# configured. We refuse to start without one. In dev / test, an empty secret
+# is permitted (smoke tests + unit tests rely on this).
+APP_ENV = os.environ.get("APP_ENV", "development").lower()
+if APP_ENV == "production" and not WEBHOOK_SECRET:
+    raise RuntimeError(
+        "CHATDADDY_WEBHOOK_SECRET is required when APP_ENV=production. "
+        "Unauthenticated webhooks allow anyone to inject messages."
+    )
 
 # Merge windows — tuned for HK Chinese WhatsApp users (IME delay + burst
 # typing). Override via env vars if needed.
@@ -168,7 +179,9 @@ def _looks_complete(text: str) -> bool:
     # Trailing punctuation — '。', '!', '?', '。', etc. — signals end of thought
     if stripped[-1] in "。！？!?":
         return True
-    return True
+    # Otherwise we don't know — assume incomplete so the longer merge window
+    # applies. The burst-mode override catches the "all-short-fragments" case.
+    return False
 
 
 async def _enqueue_for_merge(
@@ -454,10 +467,13 @@ def _get_pipeline() -> JessicaPipeline | None:
 async def chatdaddy_webhook(request: Request) -> JSONResponse:
     """Receive ChatDaddy webhook, return 200 immediately, process in background."""
 
-    # 1. Validate webhook secret (skipped if WEBHOOK_SECRET unset — dev mode)
+    # 1. Validate webhook secret. In prod APP_ENV the secret MUST be set
+    # (enforced at import time). In dev, an empty secret skips the check
+    # so curl smoke tests work locally.
     if WEBHOOK_SECRET:
         incoming = request.headers.get("X-Webhook-Secret", "")
-        if incoming != WEBHOOK_SECRET:
+        # Constant-time comparison — defeats timing-attack probing of the secret.
+        if not hmac.compare_digest(incoming.encode(), WEBHOOK_SECRET.encode()):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     # 2. Parse payload
@@ -476,8 +492,13 @@ async def chatdaddy_webhook(request: Request) -> JSONResponse:
     # `curl /webhook/chatdaddy -d '{"phone":...}'` keeps working. ChatDaddy
     # webhooks have an "event" + "data" shape; everything else falls
     # through to the smoke-test branch.
+    #
+    # SECURITY: smoke-test bypasses dedup / blocklist / group-gate and
+    # accepts an attacker-controlled phone + media_urls. Gated to non-prod.
     msg = parse_webhook(payload)
     if msg is None:
+        if APP_ENV == "production":
+            return JSONResponse({"error": "invalid webhook payload"}, status_code=400)
         return await _handle_smoke_test_payload(payload)
 
     # 3. Skip bot's own messages

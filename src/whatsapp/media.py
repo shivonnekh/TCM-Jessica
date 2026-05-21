@@ -6,16 +6,66 @@ then routes through src/media.py for transcription/OCR/PDF extraction.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
+import socket
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 
 logger = logging.getLogger("whatsapp.media")
 
 TRANSCODER_URL = "https://api-transcoder.chatdaddy.tech"
+
+# SSRF defense — only allow media fetches against these host suffixes. Any
+# URL from a webhook payload (attacker-controlled) MUST pass this check
+# before we issue an HTTP request. See _is_url_safe().
+_ALLOWED_HOST_SUFFIXES = (
+    "chatdaddy.tech",         # api.chatdaddy.tech, api-transcoder.chatdaddy.tech
+    "whatsapp.net",           # mmg.whatsapp.net (encrypted media direct URLs)
+    "whatsapp.com",           # media.whatsapp.com (rare fallback)
+)
+
+
+def _is_url_safe(url: str) -> bool:
+    """Refuse URLs that aren't on our host allowlist or that resolve to
+    private / link-local IPs (SSRF defense).
+
+    Returns False (refuses) for:
+      - Non-http(s) schemes
+      - Hosts not ending in an allowed suffix
+      - Hosts that resolve to RFC 1918 / loopback / link-local addresses
+    """
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if not any(host == suf or host.endswith("." + suf) for suf in _ALLOWED_HOST_SUFFIXES):
+        logger.warning("blocked media URL — host not on allowlist: %s", host)
+        return False
+    # Resolve and refuse any private / link-local addresses (defeats DNS
+    # rebinding to internal services and 169.254.169.254 cloud metadata).
+    try:
+        for family, *_, sockaddr in socket.getaddrinfo(host, None):
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                logger.warning("blocked media URL — resolves to non-public IP %s (%s)", ip, host)
+                return False
+    except socket.gaierror:
+        # DNS failure — we can't verify, refuse to be safe
+        logger.warning("blocked media URL — DNS resolution failed for %s", host)
+        return False
+    return True
 
 # Mime → extension mapping
 _EXT_MAP = {
@@ -149,6 +199,10 @@ async def download_media(
         logger.warning("No media URL in attachment: %s", attachment)
         return None
 
+    # SSRF defense — webhook-supplied URL must pass allowlist + IP check.
+    if not _is_url_safe(url):
+        return None
+
     headers = {}
     if api_token:
         headers["Authorization"] = f"Bearer {api_token}"
@@ -160,6 +214,11 @@ async def download_media(
             f"{TRANSCODER_URL}/stream-message-attachment"
             f"/{account_id}/{chat_id}/{message_id}/{att_index}"
         )
+    # transcoder_url is built from our constant TRANSCODER_URL so it's
+    # always safe, but we still defense-in-depth check it (TRANSCODER_URL
+    # is env-configurable in some deployments).
+    if transcoder_url and not _is_url_safe(transcoder_url):
+        transcoder_url = ""
 
     async with httpx.AsyncClient(timeout=30.0) as http:
         # ── Audio + Image + Video: prefer transcoder ────────────────────
@@ -297,6 +356,10 @@ async def download_media(
                     fresh_url = fresh_atts[0].get("url", "")
                     if not fresh_url or fresh_url == url:
                         # Same encrypted URL — no fresh decryption available
+                        continue
+                    # SSRF — fresh_url originates from upstream API response;
+                    # treat it as untrusted and re-check the allowlist.
+                    if not _is_url_safe(fresh_url):
                         continue
                     logger.info(
                         "[3rd fallback] Refetched fresh attachment URL via "
