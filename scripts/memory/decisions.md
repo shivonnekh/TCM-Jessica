@@ -11,3 +11,12 @@
 - 2. **OpenAI 的中文渲染对汤水 product shot 是够用的**（汤水图片不需要做精确的中文标注，跟 dr-baba 要的解剖图 + 穴位标注不一样）
 - 3. **不是终稿** — 这些都是 placeholder，等 Care Plus 给真图就替换掉了。AI 图片在产品页用一周不会出大事，但要先标清楚「示意圖」
 
+
+## 2026-05-21 11:10 — TCM-Jessica
+
+### Decisions & Reasoning
+- 控制你的浏览器，用你个人号发。适合小规模测试，但要保持浏览器开着。
+- 2. 用哪个号发（个人号还是 ChatDaddy 业务号）？
+- 明白了。就是用 Playwright 打开你的 WhatsApp Web，自动发测试消息给那个 agent，然后看它怎么回。
+- 1. 用你已有的 Chrome Default profile（不用重新登录）
+

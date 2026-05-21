@@ -3,12 +3,16 @@ WhatsApp Agent Tester
 Automated conversation tester for TCM Jessica agent.
 Sends RESTART, then simulates a patient consultation.
 Logs full conversation for analysis.
+
+Usage:
+  1. CLOSE Google Chrome completely first
+  2. Run: python3 scripts/whatsapp_tester.py
+  3. Chrome will open with your existing WhatsApp Web session (no QR needed)
 """
 
 import asyncio
 import json
 import os
-import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -18,268 +22,280 @@ from playwright.async_api import async_playwright
 
 # ── Config ────────────────────────────────────────────────────────────────────
 AGENT_NUMBER = "+852 5241 7448"
+CHROME_PROFILE_DIR = os.path.expanduser(
+    "~/Library/Application Support/Google/Chrome"
+)
+CHROME_PROFILE = "Default"          # shivonnekhoo@gmail.com
 LOG_DIR = Path(__file__).parent.parent / "data" / "test_logs"
-MAX_TURNS = 20  # safety cap
+MAX_TURNS = 20                       # safety cap
+SILENCE_WINDOW = 4.0                 # seconds of no new msgs = agent done sending
+REPLY_PAUSE = 1.5                    # pause before we type our reply (feels human)
 
 PATIENT_SYSTEM_PROMPT = """You are a patient consulting a Traditional Chinese Medicine (TCM) WhatsApp chatbot.
 
 Your background:
-- 35-year-old woman
+- 35-year-old woman named Amy
 - Feeling tired all the time, poor sleep, occasional stomach bloating
-- Heard about TCM from a friend, curious but slightly skeptical
-- Cantonese speaker but comfortable with English/Chinese mix
+- Heard about TCM from a friend — curious but slightly skeptical
+- HK local, comfortable with Cantonese/English mix
 
 Your job:
 - Respond naturally as this patient would
 - Answer the bot's questions honestly based on your symptoms
 - Keep replies SHORT (1-3 sentences max) — this is WhatsApp
-- If the bot asks for your name, say "Amy"
-- If the bot asks for your age, say "35"
+- If asked your name → "Amy"
+- If asked your age → "35"
 - Be slightly hesitant but cooperative
 - Do NOT push for appointment — let the bot lead you there naturally
 - Do NOT break character
 
-Reply ONLY with what Amy would say. No meta-commentary."""
+Reply ONLY with what Amy would say. Nothing else."""
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
-def setup_log():
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+def setup_log() -> tuple[Path, list]:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = LOG_DIR / f"test_{ts}.json"
     return log_file, []
 
 
-def log_message(conversation: list, role: str, text: str):
+def log_msg(conversation: list, role: str, text: str) -> None:
     entry = {"role": role, "text": text, "time": datetime.now().isoformat()}
     conversation.append(entry)
-    prefix = "🤖 AGENT" if role == "agent" else "👤 PATIENT"
+    prefix = "🤖 AGENT  " if role == "agent" else "👤 PATIENT"
     print(f"\n{prefix}: {text}")
-    return entry
 
 
-async def find_and_open_chat(page, number: str):
-    """Search for the contact number and open the chat."""
-    print(f"\n🔍 Searching for {number}...")
+def save_log(log_file: Path, conversation: list) -> None:
+    with open(log_file, "w", encoding="utf-8") as f:
+        json.dump(conversation, f, ensure_ascii=False, indent=2)
+    print(f"\n📝 Saved: {log_file}")
 
-    # Use the specific search input field
-    search_input = page.locator('input[data-tab="3"]')
-    await search_input.wait_for(timeout=30000)
-    await search_input.click()
+
+# ── WhatsApp helpers ──────────────────────────────────────────────────────────
+
+async def open_chat(page, number: str) -> bool:
+    """Search for the contact and open the chat."""
+    print(f"\n🔍 Opening chat with {number}...")
+
+    # Click the search input
+    search = page.locator('input[data-tab="3"]')
+    await search.wait_for(timeout=30_000)
+    await search.click()
     await asyncio.sleep(0.5)
-
-    # Type the number
-    await search_input.fill(number)
+    await search.fill(number)
     await asyncio.sleep(2)
 
-    # Look for the result and click it
+    # Click the first result
     try:
-        # Try clicking first result in list
-        result = page.locator('div[role="listitem"]').first
-        await result.wait_for(timeout=5000)
-        await result.click()
-        print(f"✅ Opened chat with {number}")
-        await asyncio.sleep(1)
+        first_result = page.locator('div[role="listitem"]').first
+        await first_result.wait_for(timeout=8_000)
+        await first_result.click()
+        await asyncio.sleep(1.5)
+        print(f"✅ Chat open")
         return True
     except Exception:
-        print(f"⚠️  Could not find {number} in search results.")
-        print("   Make sure the number is saved or has chatted before.")
+        print(f"⚠️  Contact not found in search. Make sure you've chatted before.")
         return False
 
 
-async def send_message(page, text: str):
-    """Type and send a message in the open chat."""
-    # Find the message box
-    msg_box = page.locator('div[contenteditable="true"][data-tab="10"]')
-    await msg_box.wait_for(timeout=10000)
-    await msg_box.click()
+async def send(page, text: str) -> None:
+    """Type and send a message."""
+    box = page.locator('div[contenteditable="true"][data-tab="10"]')
+    await box.wait_for(timeout=10_000)
+    await box.click()
     await asyncio.sleep(0.3)
-
-    # Type the message
-    await page.keyboard.type(text, delay=30)
+    await page.keyboard.type(text, delay=25)
     await asyncio.sleep(0.3)
     await page.keyboard.press("Enter")
     await asyncio.sleep(0.5)
-    print(f"✉️  Sent: {text}")
+    print(f"✉️  Sent: {text[:80]}{'…' if len(text) > 80 else ''}")
 
 
-async def wait_for_new_message(page, last_seen_count: int, timeout: int = 60) -> str | None:
-    """Wait until a new incoming message appears and return its text."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        # Get all incoming message bubbles
-        msgs = await page.locator(
-            'div.message-in span.selectable-text span'
-        ).all_inner_texts()
-
-        if len(msgs) > last_seen_count:
-            # New messages arrived — grab all new ones joined
-            new_msgs = msgs[last_seen_count:]
-            combined = " | ".join(m.strip() for m in new_msgs if m.strip())
-            return combined, len(msgs)
-
-        await asyncio.sleep(1.5)
-
-    print("⏰ Timeout waiting for agent reply.")
-    return None, last_seen_count
-
-
-async def count_incoming_messages(page) -> int:
-    msgs = await page.locator(
+async def get_incoming_texts(page) -> list[str]:
+    """Return all visible incoming message texts."""
+    return await page.locator(
         'div.message-in span.selectable-text span'
     ).all_inner_texts()
-    return len(msgs)
 
 
-def generate_patient_reply(client: anthropic.Anthropic, conversation: list, agent_msg: str) -> str:
-    """Use Claude to generate a realistic patient reply."""
-    messages = []
+async def wait_for_agent_burst(
+    page,
+    baseline_count: int,
+    first_timeout: int = 90,
+    silence: float = SILENCE_WINDOW,
+) -> tuple[str | None, int]:
+    """
+    Wait for the agent to finish sending its turn (may be multiple bubbles).
+    Strategy:
+      1. Wait up to `first_timeout` s for the first new message.
+      2. Once the first arrives, keep collecting for `silence` seconds of no new msgs.
+      3. Return combined text + new baseline count.
+    """
+    deadline = time.time() + first_timeout
+    first_arrived = False
+    last_change_time = time.time()
+    current_count = baseline_count
+
+    while True:
+        texts = await get_incoming_texts(page)
+        new_count = len(texts)
+
+        if new_count > current_count:
+            current_count = new_count
+            last_change_time = time.time()
+            if not first_arrived:
+                first_arrived = True
+                print(f"   ↳ First reply received, collecting burst…")
+
+        if first_arrived:
+            # Once we have messages, wait for silence window
+            if time.time() - last_change_time >= silence:
+                new_texts = texts[baseline_count:]
+                combined = "\n".join(t.strip() for t in new_texts if t.strip())
+                return combined, current_count
+
+        elif time.time() > deadline:
+            print("⏰ Timeout — no reply received.")
+            return None, current_count
+
+        await asyncio.sleep(0.8)
+
+
+# ── AI patient reply ──────────────────────────────────────────────────────────
+
+def patient_reply(
+    client: anthropic.Anthropic,
+    conversation: list,
+    agent_text: str,
+) -> str:
+    """Generate a natural patient reply using Claude Haiku."""
+    messages: list[dict] = []
     for entry in conversation:
         if entry["role"] == "agent":
             messages.append({"role": "user", "content": entry["text"]})
         elif entry["role"] == "patient":
             messages.append({"role": "assistant", "content": entry["text"]})
 
-    # Add the latest agent message
-    messages.append({"role": "user", "content": agent_msg})
+    messages.append({"role": "user", "content": agent_text})
 
-    response = client.messages.create(
+    resp = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=200,
         system=PATIENT_SYSTEM_PROMPT,
         messages=messages,
     )
-    return response.content[0].text.strip()
-
-
-def save_log(log_file: Path, conversation: list):
-    with open(log_file, "w", encoding="utf-8") as f:
-        json.dump(conversation, f, ensure_ascii=False, indent=2)
-    print(f"\n📝 Log saved to: {log_file}")
-
-
-def print_analysis_header():
-    print("\n" + "="*60)
-    print("📊 CONVERSATION COMPLETE — Check these:")
-    print("="*60)
-    print("1. Was the conversation logic reasonable / natural?")
-    print("2. Did the agent recommend products?")
-    print("3. Did the agent push for appointment booking?")
-    print("="*60)
+    return resp.content[0].text.strip()
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-async def main():
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("⚠️  ANTHROPIC_API_KEY not set. Patient replies will be static.")
-
+async def main() -> None:
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     client = anthropic.Anthropic(api_key=api_key) if api_key else None
+    if not client:
+        print("⚠️  ANTHROPIC_API_KEY missing — patient replies will be static fallback.")
+
     log_file, conversation = setup_log()
 
     async with async_playwright() as p:
-        print("\n🚀 Opening Chrome with WhatsApp Web...")
-        browser = await p.chromium.launch(
+        print("\n🚀 Launching Chrome with your existing profile…")
+        print("   (Chrome must be fully closed first)")
+
+        # Use the real Chrome with your existing profile — no QR scan needed
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir=CHROME_PROFILE_DIR,
+            channel="chrome",
             headless=False,
-            args=["--start-maximized"],
-        )
-        context = await browser.new_context(
+            args=[
+                f"--profile-directory={CHROME_PROFILE}",
+                "--start-maximized",
+                "--no-first-run",
+                "--no-default-browser-check",
+            ],
             viewport={"width": 1400, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
         )
+
         page = await context.new_page()
         await page.goto("https://web.whatsapp.com")
 
-        print("\n📱 Please scan the QR code to log in...")
-        print("   Waiting up to 2 minutes...")
-
-        # Wait for WhatsApp to fully load (search bar appears)
+        print("\n⏳ Loading WhatsApp Web…")
         try:
-            await page.wait_for_selector('[data-tab="3"]', timeout=120000)
-            print("✅ Logged in to WhatsApp Web!")
+            # Wait for WhatsApp to load (search box = fully loaded)
+            await page.wait_for_selector('input[data-tab="3"]', timeout=60_000)
+            print("✅ WhatsApp Web loaded (already logged in!)")
         except Exception:
-            print("❌ Login timeout. Please try again.")
-            await browser.close()
+            print("❌ WhatsApp Web didn't load in time. Make sure Chrome was closed first.")
+            await context.close()
             return
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(1.5)
 
-        # Open the chat
-        opened = await find_and_open_chat(page, AGENT_NUMBER)
-        if not opened:
-            print("❌ Could not open chat. Exiting.")
-            await browser.close()
+        # Open the agent chat
+        if not await open_chat(page, AGENT_NUMBER):
+            await context.close()
             return
 
-        await asyncio.sleep(2)
+        # ── RESTART ───────────────────────────────────────────────────────────
+        print("\n" + "=" * 60)
+        print("🔄  Sending RESTART")
+        print("=" * 60)
+        await send(page, "RESTART")
+        log_msg(conversation, "patient", "RESTART")
 
-        # ── Step 1: RESTART ────────────────────────────────────────────
-        print("\n" + "="*60)
-        print("🔄 Sending RESTART...")
-        print("="*60)
-        await send_message(page, "RESTART")
-        log_message(conversation, "patient", "RESTART")
+        baseline = len(await get_incoming_texts(page))
+        reply_text, baseline = await wait_for_agent_burst(page, baseline, first_timeout=60)
+        if reply_text:
+            log_msg(conversation, "agent", reply_text)
 
-        baseline = await count_incoming_messages(page)
-        print(f"   Waiting for agent response...")
-        agent_reply, baseline = await wait_for_new_message(page, baseline, timeout=60)
+        await asyncio.sleep(REPLY_PAUSE)
 
-        if agent_reply:
-            log_message(conversation, "agent", agent_reply)
-        else:
-            print("⚠️  No reply to RESTART. Continuing anyway...")
+        # ── Opening line ──────────────────────────────────────────────────────
+        opener = "Hello~ 我想了解一下中醫"
+        await send(page, opener)
+        log_msg(conversation, "patient", opener)
 
-        await asyncio.sleep(2)
+        # ── Conversation loop ─────────────────────────────────────────────────
+        for turn in range(MAX_TURNS):
+            print(f"\n⏳ [{turn + 1}/{MAX_TURNS}] Waiting for agent burst…")
+            reply_text, baseline = await wait_for_agent_burst(page, baseline)
 
-        # ── Step 2: Opening greeting ───────────────────────────────────
-        opening = "Hello 你好, 我想了解一下中医"
-        await send_message(page, opening)
-        log_message(conversation, "patient", opening)
-        baseline = await count_incoming_messages(page)
-
-        # ── Step 3: Conversation loop ──────────────────────────────────
-        turn = 0
-        while turn < MAX_TURNS:
-            print(f"\n⏳ Waiting for agent reply (turn {turn + 1})...")
-            agent_reply, baseline = await wait_for_new_message(page, baseline, timeout=90)
-
-            if not agent_reply:
-                print("⏰ No reply received. Ending test.")
+            if not reply_text:
+                print("🛑 No reply — ending test.")
                 break
 
-            log_message(conversation, "agent", agent_reply)
+            log_msg(conversation, "agent", reply_text)
 
-            # Check if conversation seems done (appointment booked / farewell)
-            done_signals = ["再见", "bye", "appointment", "预约成功", "感谢", "thank you"]
-            if any(sig.lower() in agent_reply.lower() for sig in done_signals):
+            # Detect natural end of conversation
+            end_signals = ["再見", "bye", "appointment confirmed", "預約成功", "感謝你", "thank you"]
+            if any(sig.lower() in reply_text.lower() for sig in end_signals):
                 print("\n✅ Conversation reached a natural end.")
                 break
 
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(REPLY_PAUSE)
 
-            # Generate patient reply
+            # Generate and send patient reply
             if client:
-                patient_reply = generate_patient_reply(client, conversation, agent_reply)
+                p_reply = patient_reply(client, conversation, reply_text)
             else:
-                patient_reply = "好的，请继续"  # fallback
+                p_reply = "好的，請繼續"
 
-            await send_message(page, patient_reply)
-            log_message(conversation, "patient", patient_reply)
-            baseline = await count_incoming_messages(page)
-            turn += 1
+            await send(page, p_reply)
+            log_msg(conversation, "patient", p_reply)
 
-        # ── Done ───────────────────────────────────────────────────────
+        # ── Done ──────────────────────────────────────────────────────────────
         save_log(log_file, conversation)
-        print_analysis_header()
-
-        print("\n🔓 Browser staying open for 60s so you can review...")
-        await asyncio.sleep(60)
-        await browser.close()
+        print("\n" + "=" * 60)
+        print("📊 REVIEW CHECKLIST:")
+        print("  1. Conversation logic reasonable / natural?")
+        print("  2. Agent recommended products?")
+        print("  3. Agent led to appointment booking?")
+        print("=" * 60)
+        print("\n🔓 Browser staying open 90s — review the chat then close manually.")
+        await asyncio.sleep(90)
+        await context.close()
 
 
 if __name__ == "__main__":

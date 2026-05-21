@@ -29,7 +29,7 @@ def build_specialist_registry(
 ) -> dict[SpecialistName, SpecialistProtocol]:
     return {
         SpecialistName.GREETING: GreetingAgent(client),
-        SpecialistName.FAQ: FAQAgent(),
+        SpecialistName.FAQ: FAQAgent(client=client),
         SpecialistName.SALES: SalesAgent(),
         SpecialistName.CONSTITUTION: ConstitutionAgent(),
         SpecialistName.APPOINTMENT: AppointmentAgent(),
