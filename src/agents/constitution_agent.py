@@ -501,15 +501,24 @@ def _build_payload_ask_mcq(
     tongue_findings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     q = MCQS[q_idx]
+    options = [{"id": o["id"], "label": o["label"]} for o in q["options"]]
+    # Render the options as a single pre-formatted string the Writer MUST
+    # use verbatim — prevents LLM from dropping option D / reordering.
+    rendered_options = "\n".join(f"{o['id']}. {o['label']}" for o in options)
     payload = {
         "phase": "asking_mcq",
         "q_index": q_idx,
         "q_total": MAX_MCQ,
         "question": q["question"],
-        "options": [
-            {"id": o["id"], "label": o["label"]} for o in q["options"]
-        ],
-        "writer_hint": f"問第 {q_idx + 1} / {MAX_MCQ} 條題，俾用戶揀 A/B/C/D。",
+        "options": options,
+        "options_rendered": rendered_options,
+        "writer_hint": (
+            f"問第 {q_idx + 1} / {MAX_MCQ} 條題。\n"
+            f"Bubble 1: 「{q['question']}」(可以加 emoji)\n"
+            f"Bubble 2: 必須 verbatim 用呢段（全部 4 個選項 A B C D 一個都唔少）:\n"
+            f"{rendered_options}\n"
+            f"絕對唔可以剩低任何選項、唔可以改字、唔可以分開做幾個 bubble。"
+        ),
     }
     # On the first MCQ right after vision analysis, share a preliminary
     # tongue reading first, THEN ask the first question.
@@ -518,8 +527,10 @@ def _build_payload_ask_mcq(
         payload["tongue_findings"] = tongue_findings
         payload["writer_hint"] = (
             "Bubble 1-2: 用 1-2 句講脷相觀察 (顏色、苔、形態) + 1 句初步方向 "
-            "(例 「初步睇起來氣虛偏向」)。"
-            f"Bubble 3+: 然後話「我再問你幾條題確認」，問第 {q_idx + 1} / {MAX_MCQ} 條題。"
+            "(例 「初步睇起來氣虛偏向」)。\n"
+            f"Bubble 3: 「{q['question']}」\n"
+            "Bubble 4: 必須 verbatim 用呢段（全部 4 個選項一個都唔少）:\n"
+            f"{rendered_options}"
         )
     return payload
 

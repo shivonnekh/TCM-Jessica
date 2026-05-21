@@ -242,6 +242,20 @@ def _rule_overrides(
             ),
         )
 
+    # User wants to book a clinic visit / online consult / asks about
+    # location → Appointment Agent (regardless of status).
+    if _wants_appointment(user_message):
+        return PlannerDecision(
+            specialists=[SpecialistName.APPOINTMENT],
+            mode="solo",
+            reasoning="rule: user wants appointment / clinic / online consult",
+            notes_for_writer=(
+                "用戶想預約 / 睇醫師 / 問診所。引導佢揀「到診」or「網上視診」。"
+                "已揀模式就 collect 地區或者直接 propose slot — 切記要跟到尾，"
+                "唔好淨係提一句然後 drop。"
+            ),
+        )
+
     # First-touch BUT user already mentioned a symptom in their opening
     # message → compact intro PLUS Constitution Agent on the same turn,
     # so we don't ask "what's bothering you?" after the user already
@@ -311,6 +325,24 @@ def _wants_to_buy(text: str) -> bool:
     if not text:
         return False
     return any(kw in text for kw in _BUYING_INTENT_KEYWORDS)
+
+
+# Appointment-intent signals. When user wants to book / see doctor /
+# visit clinic / use online consultation.
+_APPOINTMENT_INTENT_KEYWORDS = (
+    "預約", "预约", "睇醫師", "看医师", "睇中醫", "看中医",
+    "到診", "到诊", "親身", "亲身", "到店", "上門", "上门",
+    "視診", "视诊", "視像", "视像", "video", "視頻",
+    "幾時可以", "几时可以", "幾點", "几点", "今日", "今天",
+    "聽日", "听日", "明天", "後日", "后日",
+    "診所喺邊", "诊所在哪", "點去", "点去", "地址",
+)
+
+
+def _wants_appointment(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _APPOINTMENT_INTENT_KEYWORDS)
 
 
 # -------------------------------------------------------------------
