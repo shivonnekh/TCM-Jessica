@@ -273,9 +273,9 @@ class JessicaPipeline:
             return output
 
         names = list(decision.specialists)
-        co = names[1] if len(names) == 2 else None
 
-        if decision.parallel and len(names) == 2:
+        # Parallel — only meaningful with 2 specialists.
+        if decision.mode == "parallel" and len(names) == 2:
             return list(
                 await asyncio.gather(
                     _run_one(names[0], names[1]),
@@ -283,6 +283,7 @@ class JessicaPipeline:
                 )
             )
 
+        # Solo or sequential — run in order, primary first.
         results: list[SpecialistOutput] = []
         for i, n in enumerate(names):
             other = names[1 - i] if len(names) == 2 else None

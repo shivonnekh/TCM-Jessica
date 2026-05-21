@@ -166,21 +166,36 @@ async def get_last_incoming_id(page) -> str:
 
 
 async def get_new_incoming_texts(page, after_id: str) -> list[str]:
-    """Return text of all incoming messages that appeared after `after_id`."""
+    """Return text of all incoming message-in elements that arrived after after_id."""
     return await page.evaluate("""(afterId) => {
-        const all = Array.from(document.querySelectorAll('div[data-id]'));
-        let collecting = (afterId === '');
-        const result = [];
-        for (const el of all) {
-            const id = el.getAttribute('data-id') || '';
-            if (!collecting && id === afterId) { collecting = true; continue; }
-            if (!collecting) continue;
-            if (el.closest('div[class*="message-in"]')) {
-                const text = el.innerText.trim();
-                if (text.length > 2) result.push(text);
+        // Walk all message-in divs; collect those whose data-id ancestor comes after afterId
+        const msgIns = Array.from(document.querySelectorAll('div[class*="message-in"]'));
+
+        function getDataId(el) {
+            let cur = el.parentElement;
+            for (let i = 0; i < 8; i++) {
+                if (!cur) break;
+                const id = cur.getAttribute('data-id');
+                if (id) return id;
+                cur = cur.parentElement;
+            }
+            return '';
+        }
+
+        // Find the index of the baseline message
+        let startIdx = 0;
+        if (afterId) {
+            for (let i = 0; i < msgIns.length; i++) {
+                if (getDataId(msgIns[i]) === afterId) {
+                    startIdx = i + 1;
+                    break;
+                }
             }
         }
-        return result;
+
+        return msgIns.slice(startIdx)
+            .map(el => el.innerText.trim())
+            .filter(t => t.length > 2);
     }""", after_id)
 
 
@@ -196,17 +211,22 @@ async def wait_for_agent_burst(
     Returns (combined_text, new_last_id).
     """
     # Step 1: wait for a new incoming message (id different from last_id)
+    # data-id is an ANCESTOR of message-in, so we walk UP from message-in.
     try:
         escaped = last_id.replace("'", "\\'")
         await page.wait_for_function(
             f"""() => {{
-                const msgs = document.querySelectorAll('div[data-id]');
-                let lastIn = '';
-                msgs.forEach(el => {{
-                    if (el.closest('div[class*="message-in"]'))
-                        lastIn = el.getAttribute('data-id') || '';
-                }});
-                return lastIn !== '' && lastIn !== '{escaped}';
+                const msgIns = document.querySelectorAll('div[class*="message-in"]');
+                if (!msgIns.length) return false;
+                const lastIn = msgIns[msgIns.length - 1];
+                let el = lastIn.parentElement;
+                for (let i = 0; i < 8; i++) {{
+                    if (!el) break;
+                    const id = el.getAttribute('data-id');
+                    if (id) return id !== '{escaped}';
+                    el = el.parentElement;
+                }}
+                return false;
             }}""",
             timeout=first_timeout * 1000,
             polling=800,
@@ -236,28 +256,46 @@ async def wait_for_agent_burst(
 
 # ── AI patient reply ──────────────────────────────────────────────────────────
 
+# Fallback replies when API is unavailable — cycle through these
+_FALLBACK_REPLIES = [
+    "B", "A", "B", "係呀", "有時會", "唔係好清楚", "好的", "明白", "係",
+    "冇特別", "有少少", "一般", "好的，謝謝", "Amy，32歲", "係呀，最近幾個月",
+]
+_fallback_idx = 0
+
+
 def patient_reply(
-    client: anthropic.Anthropic,
+    client: anthropic.Anthropic | None,
     conversation: list,
     agent_text: str,
 ) -> str:
-    """Generate a natural patient reply using Claude Haiku."""
-    messages: list[dict] = []
-    for entry in conversation:
-        if entry["role"] == "agent":
-            messages.append({"role": "user", "content": entry["text"]})
-        elif entry["role"] == "patient":
-            messages.append({"role": "assistant", "content": entry["text"]})
+    """Generate a natural patient reply using Claude Haiku, with fallback."""
+    global _fallback_idx
 
-    messages.append({"role": "user", "content": agent_text})
+    if client:
+        messages: list[dict] = []
+        for entry in conversation:
+            if entry["role"] == "agent":
+                messages.append({"role": "user", "content": entry["text"]})
+            elif entry["role"] == "patient":
+                messages.append({"role": "assistant", "content": entry["text"]})
+        messages.append({"role": "user", "content": agent_text})
 
-    resp = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=200,
-        system=PATIENT_SYSTEM_PROMPT,
-        messages=messages,
-    )
-    return resp.content[0].text.strip()
+        try:
+            resp = client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=200,
+                system=PATIENT_SYSTEM_PROMPT,
+                messages=messages,
+            )
+            return resp.content[0].text.strip()
+        except Exception as e:
+            print(f"⚠️  API error ({e.__class__.__name__}) — using fallback reply.")
+
+    # Fallback: cycle through preset answers
+    reply = _FALLBACK_REPLIES[_fallback_idx % len(_FALLBACK_REPLIES)]
+    _fallback_idx += 1
+    return reply
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -314,27 +352,32 @@ async def main() -> None:
 
     log_file, conversation = setup_log()
 
-    # ── Launch real Chrome off-screen ─────────────────────────────────────────
-    # Off-screen = no focus stealing. Real Chrome = proper WA WebSocket.
-    chrome_bin = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    print("🚀 Launching Chrome off-screen with copied profile…")
-    chrome_proc = subprocess.Popen(
-        [
-            chrome_bin,
-            f"--remote-debugging-port={CHROME_DEBUG_PORT}",
-            f"--user-data-dir={TEMP_PROFILE_DIR}",
-            "--profile-directory=Default",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--window-position=10000,0",  # off-screen — you won't see it
-            "--window-size=1400,900",
-            "https://web.whatsapp.com",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    print(f"   Chrome PID: {chrome_proc.pid}")
-    await asyncio.sleep(5)
+    # ── Launch Chrome off-screen if not already running ───────────────────────
+    import urllib.request
+    chrome_proc = None
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{CHROME_DEBUG_PORT}/json/version", timeout=2)
+        print(f"✅ Chrome already running on port {CHROME_DEBUG_PORT} — reusing.")
+    except Exception:
+        chrome_bin = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        print("🚀 Launching Chrome off-screen with copied profile…")
+        chrome_proc = subprocess.Popen(
+            [
+                chrome_bin,
+                f"--remote-debugging-port={CHROME_DEBUG_PORT}",
+                f"--user-data-dir={TEMP_PROFILE_DIR}",
+                "--profile-directory=Default",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--window-position=10000,0",
+                "--window-size=1400,900",
+                "https://web.whatsapp.com",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print(f"   Chrome PID: {chrome_proc.pid}")
+        await asyncio.sleep(5)
 
     async with async_playwright() as p:
         print(f"🔌 Connecting via CDP (port {CHROME_DEBUG_PORT})…")
@@ -356,9 +399,24 @@ async def main() -> None:
 
         print("✅ Connected!")
         context = browser.contexts[0] if browser.contexts else await browser.new_context()
-        wa_page = next((pg for pg in context.pages if "whatsapp" in pg.url), None)
-        page = wa_page if wa_page else await context.new_page()
-        if not wa_page:
+
+        # Find the WhatsApp tab that is fully loaded (has the search bar)
+        page = None
+        for pg in context.pages:
+            if "web.whatsapp.com" in pg.url and "sw.js" not in pg.url and "worker" not in pg.url.lower():
+                try:
+                    # Quick check: is the search bar already there?
+                    el = await pg.query_selector('input[data-tab="3"]')
+                    if el:
+                        page = pg
+                        print("   Found loaded WhatsApp tab.")
+                        break
+                except Exception:
+                    pass
+
+        if not page:
+            # Open a fresh tab
+            page = await context.new_page()
             await page.goto("https://web.whatsapp.com")
 
         print("⏳ Waiting for WhatsApp Web to load…")
@@ -369,7 +427,8 @@ async def main() -> None:
             await page.screenshot(path="/tmp/wa_debug.png")
             print("❌ WhatsApp didn't load — screenshot: /tmp/wa_debug.png")
             await browser.close()
-            chrome_proc.terminate()
+            if chrome_proc:
+                chrome_proc.terminate()
             return
 
         await asyncio.sleep(1.5)
@@ -439,7 +498,8 @@ async def main() -> None:
         print("=" * 60)
         print("\n✅ Done. Closing Chrome.")
         await browser.close()
-        chrome_proc.terminate()
+        if chrome_proc:
+            chrome_proc.terminate()
 
 
 if __name__ == "__main__":

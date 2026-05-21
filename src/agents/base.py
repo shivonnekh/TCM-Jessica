@@ -8,7 +8,7 @@ in isolation.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,23 +24,98 @@ class SpecialistName(StrEnum):
 
 
 # -------------------------------------------------------------------
+# Specialist Catalog — single source of truth for Planner prompts.
+#
+# When you add or rename a specialist, update this catalog. The Planner
+# prompt is built from this dict at runtime — no other prompt edit needed.
+# -------------------------------------------------------------------
+
+
+class SpecialistMeta(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: SpecialistName
+    one_liner_zh: str
+    triggers_zh: tuple[str, ...]  # short phrases — examples of when to route here
+    output_summary: str  # what this specialist returns (for Writer awareness)
+
+
+SPECIALIST_CATALOG: dict[SpecialistName, SpecialistMeta] = {
+    SpecialistName.GREETING: SpecialistMeta(
+        name=SpecialistName.GREETING,
+        one_liner_zh="寒暄、閒聊、無內容嘅問候",
+        triggers_zh=("hi", "你好", "在嗎", "謝謝"),
+        output_summary="tone + topic + intent_flags (e.g. new_user_intro)",
+    ),
+    SpecialistName.FAQ: SpecialistMeta(
+        name=SpecialistName.FAQ,
+        one_liner_zh="中醫養生、食療、穴位、體質常識嘅知識性問題",
+        triggers_zh=("點解", "乜嘢", "邊款好", "湯水點煲", "穴位邊度"),
+        output_summary="answer_facts + cards_used + next_best_question",
+    ),
+    SpecialistName.SALES: SpecialistMeta(
+        name=SpecialistName.SALES,
+        one_liner_zh="用戶想睇產品、買嘢、問價錢，或者剛診斷完體質要 pitch",
+        triggers_zh=("有咩賣", "幾錢", "點買", "湯水推介", "藥膏"),
+        output_summary="products_to_pitch + pitch_angle + active_offers",
+    ),
+    SpecialistName.CONSTITUTION: SpecialistMeta(
+        name=SpecialistName.CONSTITUTION,
+        one_liner_zh="用戶提到健康/不適/症狀，或者 send 咗脷相，要評估體質",
+        triggers_zh=("我覺得", "好攰", "我嘅體質", "脷相", "症狀"),
+        output_summary="phase (asking_tongue/mcq/declaring) + findings",
+    ),
+    SpecialistName.APPOINTMENT: SpecialistMeta(
+        name=SpecialistName.APPOINTMENT,
+        one_liner_zh="用戶想預約、問診所地址、問視診",
+        triggers_zh=("預約", "幾時可以", "診所喺邊", "可唔可以視診"),
+        output_summary="phase (asking_mode/location/proposing/confirmed)",
+    ),
+}
+
+
+def render_specialist_menu_zh() -> str:
+    """Render the catalog into a markdown-ish bullet list for the Planner prompt."""
+    lines = []
+    for meta in SPECIALIST_CATALOG.values():
+        triggers = "、".join(meta.triggers_zh[:3])
+        lines.append(f"- {meta.name.value}: {meta.one_liner_zh}（例：{triggers}）")
+    return "\n".join(lines)
+
+
+# -------------------------------------------------------------------
 # Planner
 # -------------------------------------------------------------------
+
+
+PlannerMode = Literal["solo", "sequential", "parallel"]
 
 
 class PlannerDecision(BaseModel):
     """Routing decision from the Planner Agent.
 
-    `specialists` is ordered: index 0 is primary, index 1 (if present)
-    is the parallel co-specialist. Hard cap of 2 (CLAUDE.md §3.4).
+    Fields:
+      - specialists: 1 or 2 specialists. Index 0 is primary, index 1 (if
+        present) is the co-specialist. Hard cap of 2 (CLAUDE.md §3.4).
+      - mode:
+          "solo"       → only 1 specialist (1 element in `specialists`)
+          "sequential" → run primary, then secondary (default for 2 specs)
+          "parallel"   → fan out both at once (use when outputs are
+                          independent — e.g. faq + appointment)
+      - reasoning: short Cantonese sentence explaining the choice.
+      - notes_for_writer: optional hint the Writer reads when composing
+        bubbles (e.g. tone, urgency).
+      - proactive_hint: optional structured hint indicating a follow-up
+        opportunity (e.g. "constitution_done — pitch soup soon").
     """
 
     model_config = ConfigDict(frozen=True)
 
     specialists: list[SpecialistName] = Field(min_length=1, max_length=2)
+    mode: PlannerMode = "solo"
     reasoning: str
-    parallel: bool = False  # if True, run both at once; else sequential
     notes_for_writer: str = ""
+    proactive_hint: str = ""
 
     def has(self, name: SpecialistName) -> bool:
         return name in self.specialists
