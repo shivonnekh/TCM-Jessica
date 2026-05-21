@@ -296,15 +296,56 @@ def _epoch_ms(dt: datetime) -> int:
     return int(dt.timestamp() * 1000)
 
 
-def _apply_specialist_diffs(user: User, outputs: list[SpecialistOutput]) -> User:
-    """Merge `suggested_user_state_diff` from each specialist into User.
+_APPEND_SUFFIX = "_append"
 
-    Only known User fields are applied; unknown keys are logged + dropped.
+
+def _apply_specialist_diffs(user: User, outputs: list[SpecialistOutput]) -> User:
+    """Merge ``suggested_user_state_diff`` from each specialist into User.
+
+    Two diff conventions are supported:
+
+    * ``"<field>": value`` — REPLACE the field with ``value``. Standard.
+    * ``"<field>_append": [items]`` — APPEND items to the existing list
+      field, deduplicating (order-preserving). Use this when a specialist
+      contributes incremental items without authority over the full list.
+      Example: Sales emits ``products_pitched_append: ["soup_xxx"]``
+      because it doesn't want to clobber pitches by other turns.
+
+    Unknown / malformed keys are logged + dropped (never raises — a buggy
+    specialist must not break the turn).
     """
     allowed = set(User.model_fields.keys())
     changes: dict[str, Any] = {}
+
     for o in outputs:
         for k, v in o.suggested_user_state_diff.items():
+            # --- "_append" convention -------------------------------
+            if k.endswith(_APPEND_SUFFIX):
+                base = k[: -len(_APPEND_SUFFIX)]
+                if base not in allowed:
+                    logger.warning(
+                        "specialist %s wrote append for unknown field %r — dropped",
+                        o.specialist,
+                        k,
+                    )
+                    continue
+                existing = changes.get(base, getattr(user, base))
+                if not isinstance(existing, list):
+                    logger.warning(
+                        "specialist %s tried _append on non-list field %r — dropped",
+                        o.specialist,
+                        base,
+                    )
+                    continue
+                new_items = v if isinstance(v, list) else [v]
+                merged = list(existing)
+                for item in new_items:
+                    if item not in merged:
+                        merged.append(item)
+                changes[base] = merged
+                continue
+
+            # --- replace --------------------------------------------
             if k not in allowed:
                 logger.warning(
                     "specialist %s wrote unknown user field %r — dropped",
@@ -313,6 +354,7 @@ def _apply_specialist_diffs(user: User, outputs: list[SpecialistOutput]) -> User
                 )
                 continue
             changes[k] = v
+
     return user.with_updates(**changes) if changes else user
 
 

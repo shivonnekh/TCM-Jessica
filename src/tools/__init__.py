@@ -13,6 +13,7 @@ Tools own no LLM logic. They are testable as pure functions.
 from src.tools.clinic_matcher import ClinicMatch, ClinicMatcher
 from src.tools.kb_index import KBCard, KBIndex
 from src.tools.kb_search import KBSearch, SearchHit
+from src.tools.product_catalog import Product, ProductCatalog, ProductMatch
 from src.tools.promotions import PromotionsLoader
 
 __all__ = [
@@ -21,6 +22,9 @@ __all__ = [
     "KBCard",
     "KBIndex",
     "KBSearch",
+    "Product",
+    "ProductCatalog",
+    "ProductMatch",
     "PromotionsLoader",
     "SearchHit",
 ]

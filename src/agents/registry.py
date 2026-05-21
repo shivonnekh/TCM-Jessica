@@ -30,7 +30,7 @@ def build_specialist_registry(
     return {
         SpecialistName.GREETING: GreetingAgent(client),
         SpecialistName.FAQ: FAQAgent(client=client),
-        SpecialistName.SALES: SalesAgent(),
-        SpecialistName.CONSTITUTION: ConstitutionAgent(),
+        SpecialistName.SALES: SalesAgent(client=client),
+        SpecialistName.CONSTITUTION: ConstitutionAgent(client=client),
         SpecialistName.APPOINTMENT: AppointmentAgent(),
     }

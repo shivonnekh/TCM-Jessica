@@ -36,22 +36,29 @@ REPLY_PAUSE = 1.5                    # pause before we type our reply (feels hum
 PATIENT_SYSTEM_PROMPT = """You are a patient consulting a Traditional Chinese Medicine (TCM) WhatsApp chatbot.
 
 Your background:
-- 35-year-old woman named Amy
-- Feeling tired all the time, poor sleep, occasional stomach bloating
-- Heard about TCM from a friend — curious but slightly skeptical
-- HK local, comfortable with Cantonese/English mix
+- 32-year-old woman named Amy
+- Main complaint: skin itching (皮肤痒), especially on arms and back, worse at night
+- Also: slightly dry skin, sometimes feels warm/flushed
+- HK local, mix Cantonese and Mandarin is fine
+- Heard about TCM from a friend, curious but slightly skeptical
 
 Your job:
 - Respond naturally as this patient would
-- Answer the bot's questions honestly based on your symptoms
+- Answer the bot's questions honestly based on your skin itching symptoms
 - Keep replies SHORT (1-3 sentences max) — this is WhatsApp
 - If asked your name → "Amy"
-- If asked your age → "35"
+- If asked your age → "32"
 - Be slightly hesitant but cooperative
 - Do NOT push for appointment — let the bot lead you there naturally
 - Do NOT break character
 
 Reply ONLY with what Amy would say. Nothing else."""
+
+# Fixed opening messages sent in sequence before dynamic replies
+FIXED_OPENERS = [
+    "了解中医",
+    "最近有感觉皮肤痒痒的",
+]
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -114,6 +121,28 @@ async def send(page, text: str) -> None:
     await page.keyboard.press("Enter")
     await asyncio.sleep(0.5)
     print(f"✉️  Sent: {text[:80]}{'…' if len(text) > 80 else ''}")
+
+
+async def send_image(page, image_path: str) -> None:
+    """Send an image file in the current WhatsApp chat."""
+    print(f"🖼️  Sending image: {Path(image_path).name}")
+    # WhatsApp Web has a hidden file input — set the file directly
+    # First click the attach button to reveal the input
+    attach_btn = page.locator('span[data-icon="plus"]').first
+    if not await attach_btn.count():
+        attach_btn = page.locator('div[title="Attach"]')
+    await attach_btn.click()
+    await asyncio.sleep(0.8)
+
+    # Set file on the image/video file input
+    file_input = page.locator('input[accept*="image/"]').first
+    await file_input.set_input_files(image_path)
+    await asyncio.sleep(1.5)
+
+    # Press Enter to send
+    await page.keyboard.press("Enter")
+    await asyncio.sleep(1)
+    print("   Image sent.")
 
 
 async def get_incoming_texts(page) -> list[str]:
@@ -201,6 +230,13 @@ def patient_reply(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 TEMP_PROFILE_DIR = "/tmp/chrome-wa-test"
+TONGUE_IMAGE = str(Path(__file__).parent.parent / "data" / "media" / "tongue_test.png")
+
+# Keywords that signal the agent is asking for a tongue photo
+TONGUE_REQUEST_SIGNALS = [
+    "舌頭", "舌头", "舌苔", "拍相", "拍張", "照片", "相片",
+    "send", "tongue", "photo", "image", "圖片",
+]
 
 
 def launch_chrome_with_debug() -> subprocess.Popen:
@@ -286,26 +322,28 @@ async def main() -> None:
             await context.close()
             return
 
-        # ── RESTART ───────────────────────────────────────────────────────────
-        print("\n" + "=" * 60)
-        print("🔄  Sending RESTART")
-        print("=" * 60)
-        await send(page, "RESTART")
-        log_msg(conversation, "patient", "RESTART")
-
+        # ── Wait for chat history to fully load, then lock baseline ─────────────
+        print("⏳ Letting chat history settle (3s)…")
+        await asyncio.sleep(3)
         baseline = len(await get_incoming_texts(page))
-        reply_text, baseline = await wait_for_agent_burst(page, baseline, first_timeout=60)
-        if reply_text:
-            log_msg(conversation, "agent", reply_text)
+        await asyncio.sleep(2)
+        check = len(await get_incoming_texts(page))
+        if check != baseline:
+            await asyncio.sleep(3)
+            baseline = len(await get_incoming_texts(page))
+        print(f"   Baseline locked at {baseline} messages.")
 
-        await asyncio.sleep(REPLY_PAUSE)
+        # ── Fixed opening sequence ────────────────────────────────────────────
+        for opener in FIXED_OPENERS:
+            await send(page, opener)
+            log_msg(conversation, "patient", opener)
+            print(f"\n⏳ Waiting for agent response…")
+            reply_text, baseline = await wait_for_agent_burst(page, baseline)
+            if reply_text:
+                log_msg(conversation, "agent", reply_text)
+            await asyncio.sleep(REPLY_PAUSE)
 
-        # ── Opening line ──────────────────────────────────────────────────────
-        opener = "Hello~ 我想了解一下中醫"
-        await send(page, opener)
-        log_msg(conversation, "patient", opener)
-
-        # ── Conversation loop ─────────────────────────────────────────────────
+        # ── Dynamic conversation loop ─────────────────────────────────────────
         for turn in range(MAX_TURNS):
             print(f"\n⏳ [{turn + 1}/{MAX_TURNS}] Waiting for agent burst…")
             reply_text, baseline = await wait_for_agent_burst(page, baseline)
@@ -324,14 +362,21 @@ async def main() -> None:
 
             await asyncio.sleep(REPLY_PAUSE)
 
-            # Generate and send patient reply
-            if client:
-                p_reply = patient_reply(client, conversation, reply_text)
+            # If agent is asking for tongue photo, send the image
+            asking_for_tongue = any(
+                sig.lower() in reply_text.lower() for sig in TONGUE_REQUEST_SIGNALS
+            )
+            if asking_for_tongue and os.path.exists(TONGUE_IMAGE):
+                await send_image(page, TONGUE_IMAGE)
+                log_msg(conversation, "patient", "[sent tongue photo]")
             else:
-                p_reply = "好的，請繼續"
-
-            await send(page, p_reply)
-            log_msg(conversation, "patient", p_reply)
+                # Generate and send patient reply
+                if client:
+                    p_reply = patient_reply(client, conversation, reply_text)
+                else:
+                    p_reply = "好的，請繼續"
+                await send(page, p_reply)
+                log_msg(conversation, "patient", p_reply)
 
         # ── Done ──────────────────────────────────────────────────────────────
         save_log(log_file, conversation)
