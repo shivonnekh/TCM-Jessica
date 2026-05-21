@@ -1,27 +1,35 @@
 """Greeting / Others Agent — casual, warm, gentle.
 
-This is the first specialist we ship end-to-end. Goal: prove the
-pipeline (Planner → Specialist → Writer → Send → Trace).
+Two modes:
+
+1. FIRST-TOUCH (status=NEW + no history): loads the OFFICIAL intro from
+   data/greetings.json verbatim — fixed bubbles + 洪醫師 portrait. No LLM
+   ad-libbing. Brand consistency.
+
+2. ONGOING small-talk: LLM-driven structured output (tone + topic +
+   suggested_followup + intent_flags) for the Writer to compose.
 
 Output schema:
     {
+        "official_intro": bool,                # True → Writer renders verbatim
+        "intro_bubbles": [str, ...],           # only when official_intro=True
+        "intro_media": [{url_path, alt, after_bubble_idx}],
         "tone": "warm" | "playful" | "concerned",
-        "topic": str,                       # what the user touched on
-        "suggested_followup": str | None,   # an open question Writer can ask
-        "intent_flags": list[str]           # e.g. ["new_user_intro"]
+        "topic": str,
+        "suggested_followup": str | None,
+        "intent_flags": list[str]              # ["new_user_intro"] when official
     }
-
-The Greeting agent does NOT have tools. It only inspects the conversation
-and produces structured intent. The Writer composes the actual bubbles.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
-from anthropic import AsyncAnthropic
+from src.llm import LLMClient
 
 from src.agents.base import (
     SpecialistInput,
@@ -32,7 +40,38 @@ from src.crm.models import UserStatus
 
 logger = logging.getLogger("agents.greeting")
 
-DEFAULT_MODEL = "claude-haiku-4-5-20250303"  # cheap — Greeting doesn't need Sonnet
+DEFAULT_MODEL = "gpt-4o-mini"  # cheap — Greeting doesn't need Sonnet
+
+# Greetings JSON — official intro lives here, hot-reloaded on every read so
+# editing the file in prod doesn't require a redeploy.
+DEFAULT_GREETINGS_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "greetings.json"
+)
+
+
+def _load_greetings(path: Path = DEFAULT_GREETINGS_PATH) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not load %s: %s — falling back to embedded default", path, exc)
+        return {
+            "first_touch": {
+                "id": "jessica_intro_fallback",
+                "bubbles": [
+                    "Hi 嗨 ☺️ 我係 Jessica",
+                    "Care Plus 心宜中醫嘅註冊中醫師 🌿",
+                    "最近身體點啊？有冇邊度唔舒服？",
+                ],
+                "media": [],
+            }
+        }
+
+
+def _public_base_url() -> str:
+    """Public origin used to build absolute media URLs ChatDaddy can fetch."""
+    return os.environ.get(
+        "PUBLIC_BASE_URL", "https://tcm-jessica.onrender.com"
+    ).rstrip("/")
 
 _SYSTEM = """你係 Jessica 嘅 Greeting Specialist —— 處理寒暄、閒聊、初次見面。
 
@@ -59,7 +98,7 @@ _SYSTEM = """你係 Jessica 嘅 Greeting Specialist —— 處理寒暄、閒聊
 class GreetingAgent:
     def __init__(
         self,
-        client: AsyncAnthropic,
+        client: LLMClient,
         *,
         model: str = DEFAULT_MODEL,
         max_tokens: int = 300,
@@ -74,6 +113,37 @@ class GreetingAgent:
             and not inp.user.conversation_history
         )
 
+        # FIRST-TOUCH → return the OFFICIAL intro verbatim. No LLM call.
+        if is_first_touch:
+            greetings = _load_greetings()
+            ft = greetings.get("first_touch", {})
+            bubbles = list(ft.get("bubbles", []))
+            base = _public_base_url()
+            media = [
+                {
+                    "url": f"{base}{m['url_path']}" if m.get("url_path", "").startswith("/") else m.get("url_path", ""),
+                    "alt": m.get("alt", ""),
+                    "after_bubble_idx": int(m.get("after_bubble_idx", 0)),
+                }
+                for m in ft.get("media", [])
+            ]
+            payload = {
+                "official_intro": True,
+                "intro_bubbles": bubbles,
+                "intro_media": media,
+                "tone": "warm",
+                "topic": "first-touch self-introduction",
+                "suggested_followup": None,
+                "intent_flags": ["new_user_intro"],
+            }
+            output = SpecialistOutput(
+                specialist=SpecialistName.GREETING,
+                payload=payload,
+                suggested_user_state_diff={"status": UserStatus.QUALIFIED.value},
+            )
+            return output, {"model": "no_llm_first_touch", "input_tokens": 0, "output_tokens": 0}
+
+        # ONGOING small-talk → LLM
         prompt = _build_prompt(inp, is_first_touch=is_first_touch)
         response = await self._client.messages.create(
             model=self._model,
@@ -96,10 +166,9 @@ class GreetingAgent:
                 "suggested_followup": None,
                 "intent_flags": ["parse_error"],
             }
+        payload.setdefault("official_intro", False)
 
         suggested_diff: dict[str, Any] = {}
-        if is_first_touch:
-            suggested_diff["status"] = UserStatus.QUALIFIED.value
 
         output = SpecialistOutput(
             specialist=SpecialistName.GREETING,

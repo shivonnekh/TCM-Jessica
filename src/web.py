@@ -22,12 +22,13 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.agents.registry import build_specialist_registry
 from src.crm.repo import CRMRepo
+from src.llm import LLMClient
 from src.orchestrator.pipeline import JessicaPipeline
 from src.trace.writer import TraceWriter
 from src.whatsapp import client as wa_client
@@ -39,6 +40,7 @@ logger = logging.getLogger("web")
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = os.environ.get("DATABASE_PATH", str(ROOT / "data" / "jessica.db"))
 TRACE_DIR = os.environ.get("TRACE_DIR", str(ROOT / "traces"))
+MEDIA_DIR = ROOT / "data" / "media"
 
 
 # -------------------------------------------------------------------
@@ -53,7 +55,7 @@ async def lifespan(app: FastAPI):
     crm = await CRMRepo.connect(DB_PATH)
     trace_writer = TraceWriter(TRACE_DIR)
 
-    client = AsyncAnthropic()  # picks up ANTHROPIC_API_KEY from env
+    client = LLMClient()  # OpenAI under the hood, picks up OPENAI_API_KEY
     specialists = build_specialist_registry(client)
     pipeline = JessicaPipeline(
         crm=crm,
@@ -102,6 +104,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="TCM-Jessica", version="0.1.0", lifespan=lifespan)
 app.include_router(whatsapp_router)
+
+# Public-readable static media — ChatDaddy fetches these via the URL
+# Jessica writes into `WriterOutput.media_to_send`.
+if MEDIA_DIR.is_dir():
+    app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
 
 
 # -------------------------------------------------------------------

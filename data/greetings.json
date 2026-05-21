@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "description": "Official Jessica greeting templates. Greeting Agent loads this and surfaces in payload for the Writer to render verbatim — no LLM ad-libbing on first-touch intro.",
+    "doctor_name": "洪煊宜 Jessica",
+    "doctor_title": "註冊中醫師",
+    "clinic": "心宜中醫 Care Plus",
+    "last_updated": "2026-05-21"
+  },
+  "first_touch": {
+    "id": "jessica_intro_v1",
+    "bubbles": [
+      "Hi 嗨 ☺️ 我係 Jessica",
+      "Care Plus 心宜中醫嘅註冊中醫師 🌿",
+      "最近身體點啊？瞓得好唔好？有冇邊度唔舒服？",
+      "如果想，傾完之後可以影下脷相 + 答幾條問題，我幫你睇下體質 ✨"
+    ],
+    "media": [
+      {
+        "url_path": "/media/greetings/hong_doctor.jpg",
+        "alt": "洪煊宜 Jessica 中醫師 — Care Plus 心宜中醫",
+        "after_bubble_idx": 0
+      }
+    ]
+  }
+}

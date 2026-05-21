@@ -41,7 +41,7 @@ import json
 import logging
 from typing import Any
 
-from anthropic import AsyncAnthropic
+from src.llm import LLMClient
 
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
 from src.crm.models import Promotion
@@ -50,7 +50,7 @@ from src.tools.promotions import PromotionsLoader
 
 logger = logging.getLogger("agents.sales")
 
-DEFAULT_MODEL = "claude-haiku-4-5-20250303"
+DEFAULT_MODEL = "gpt-4o-mini"
 MAX_PRODUCTS_PER_TURN = 3
 MIN_CANDIDATES_TO_INVOKE_LLM = 1
 
@@ -86,7 +86,7 @@ class SalesAgent:
     def __init__(
         self,
         *,
-        client: AsyncAnthropic | None = None,
+        client: LLMClient | None = None,
         catalog: ProductCatalog | None = None,
         promotions: PromotionsLoader | None = None,
         model: str = DEFAULT_MODEL,

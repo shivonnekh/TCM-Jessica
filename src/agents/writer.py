@@ -21,7 +21,7 @@ import json
 import logging
 from typing import Any
 
-from anthropic import AsyncAnthropic
+from src.llm import LLMClient
 
 from src.agents.base import (
     PlannerDecision,
@@ -33,7 +33,7 @@ from src.crm.models import User, UserStatus
 
 logger = logging.getLogger("agents.writer")
 
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+DEFAULT_MODEL = "gpt-4o-mini"
 MAX_BUBBLES = 5
 
 
@@ -134,7 +134,7 @@ def _build_system_prompt() -> str:
 class WriterAgent:
     def __init__(
         self,
-        client: AsyncAnthropic,
+        client: LLMClient,
         *,
         model: str = DEFAULT_MODEL,
         max_tokens: int = 700,
@@ -151,6 +151,35 @@ class WriterAgent:
         planner_decision: PlannerDecision,
         specialist_outputs: list[SpecialistOutput],
     ) -> tuple[WriterOutput, dict[str, Any]]:
+        # FAST PATH: solo Greeting with official_intro=True → render
+        # the bubbles + media VERBATIM. No LLM ad-libbing on the
+        # signature first-touch intro (brand consistency).
+        if (
+            len(specialist_outputs) == 1
+            and specialist_outputs[0].specialist == SpecialistName.GREETING
+            and specialist_outputs[0].payload.get("official_intro") is True
+        ):
+            payload = specialist_outputs[0].payload
+            bubbles = list(payload.get("intro_bubbles") or [])
+            media = list(payload.get("intro_media") or [])
+            if bubbles:
+                output = WriterOutput(
+                    bubbles=bubbles[:MAX_BUBBLES],
+                    media_to_send=[
+                        {
+                            "url": m["url"],
+                            "after_bubble_idx": str(m.get("after_bubble_idx", 0)),
+                        }
+                        for m in media
+                        if m.get("url")
+                    ],
+                )
+                return output, {
+                    "model": "no_llm_official_intro",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+
         # Sort specialist outputs by priority so the prompt presents
         # high-priority info first — gives the LLM an anchor for
         # conflict resolution.

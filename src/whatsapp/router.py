@@ -397,7 +397,24 @@ async def _process_turn(
             result.turn_id, phone, len(bubbles),
         )
 
-        await _send_bubbles(account_id=account_id, chat_id=chat_id, bubbles=bubbles)
+        # media_to_send entries: {"url": str, "after_bubble_idx": str|int}
+        raw_media = getattr(result.writer_output, "media_to_send", None) or []
+        media_to_send: list[dict] = []
+        try:
+            for m in raw_media:
+                media_to_send.append({
+                    "url": m.get("url", ""),
+                    "after_bubble_idx": int(m.get("after_bubble_idx", 0)),
+                })
+        except Exception:  # noqa: BLE001
+            logger.exception("malformed media_to_send: %s", raw_media)
+
+        await _send_bubbles(
+            account_id=account_id,
+            chat_id=chat_id,
+            bubbles=bubbles,
+            media_to_send=media_to_send,
+        )
 
 
 def _extract_media_urls(attachments: list[dict]) -> list[str]:
@@ -415,10 +432,26 @@ async def _send_bubbles(
     account_id: str,
     chat_id: str,
     bubbles: list[str],
+    media_to_send: list[dict] | None = None,
 ) -> None:
-    """Send the Writer's bubble list with the client's typing-delay model."""
+    """Send the Writer's bubble list with the client's typing-delay model.
+
+    Inline media: after sending bubble index N, also send any media whose
+    ``after_bubble_idx`` equals N (image as a separate WhatsApp message).
+    """
     if not bubbles:
         return
+    media_to_send = media_to_send or []
+
+    # Group media by the bubble index they should appear after.
+    media_by_idx: dict[int, list[str]] = {}
+    for m in media_to_send:
+        url = (m.get("url") or "").strip()
+        if not url:
+            continue
+        idx = int(m.get("after_bubble_idx") or 0)
+        media_by_idx.setdefault(idx, []).append(url)
+
     for i, bubble in enumerate(bubbles):
         text = (bubble or "").strip()
         if not text:
@@ -439,6 +472,19 @@ async def _send_bubbles(
                 chat_id, i + 1, len(bubbles),
             )
             return
+
+        # Send any media that should follow this bubble.
+        for url in media_by_idx.get(i, []):
+            try:
+                await asyncio.sleep(0.8)  # gentle pause before the image
+                await client.send_message(
+                    account_id,
+                    chat_id,
+                    text="",
+                    attachments=[{"url": url, "type": "image"}],
+                )
+            except Exception:
+                logger.exception("[WA] media send failed (url=%s)", url[:80])
 
 
 # ---------------------------------------------------------------------------

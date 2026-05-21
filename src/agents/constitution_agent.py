@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from anthropic import AsyncAnthropic
+from src.llm import LLMClient
 
 from src.agents.base import (
     SpecialistInput,
@@ -44,7 +44,7 @@ from src.crm.models import Constitution, UserStatus
 
 logger = logging.getLogger("agents.constitution")
 
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"  # vision quality matters
+DEFAULT_MODEL = "gpt-4o-mini"  # vision quality matters
 MAX_MCQ = 4
 
 # temp_state namespacing — all keys live under "constitution_*" so other
@@ -133,7 +133,7 @@ class ConstitutionAgent:
     def __init__(
         self,
         *,
-        client: AsyncAnthropic | None = None,
+        client: LLMClient | None = None,
         vision_model: str = DEFAULT_MODEL,
         max_vision_tokens: int = 400,
     ) -> None:

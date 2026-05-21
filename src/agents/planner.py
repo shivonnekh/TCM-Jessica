@@ -28,7 +28,7 @@ import json
 import logging
 from typing import Any
 
-from anthropic import AsyncAnthropic
+from src.llm import LLMClient
 
 from src.agents.base import (
     SPECIALIST_CATALOG,
@@ -40,7 +40,7 @@ from src.crm.models import Constitution, User, UserStatus
 
 logger = logging.getLogger("agents.planner")
 
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+DEFAULT_MODEL = "gpt-4o-mini"
 
 
 # -------------------------------------------------------------------
@@ -95,7 +95,7 @@ def _build_system_prompt() -> str:
 class PlannerAgent:
     def __init__(
         self,
-        client: AsyncAnthropic,
+        client: LLMClient,
         *,
         model: str = DEFAULT_MODEL,
         max_tokens: int = 500,

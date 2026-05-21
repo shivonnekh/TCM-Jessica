@@ -26,7 +26,7 @@ import json
 import logging
 from typing import Any
 
-from anthropic import AsyncAnthropic
+from src.llm import LLMClient
 
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
 from src.tools.kb_index import KBIndex
@@ -34,7 +34,7 @@ from src.tools.kb_search import KBSearch, SearchHit
 
 logger = logging.getLogger("agents.faq")
 
-DEFAULT_MODEL = "claude-haiku-4-5-20250303"
+DEFAULT_MODEL = "gpt-4o-mini"
 MAX_FACTS = 5
 
 _SYSTEM = """你係 Jessica 嘅 FAQ Specialist —— 從 TCM 知識卡片入面抽取相關 facts 比 Writer 用。
@@ -67,7 +67,7 @@ class FAQAgent:
         self,
         *,
         kb_index: KBIndex | None = None,
-        client: AsyncAnthropic | None = None,
+        client: LLMClient | None = None,
         model: str = DEFAULT_MODEL,
         max_tokens: int = 600,
     ) -> None:
