@@ -413,7 +413,7 @@
         "對茶樹油過敏者忌"
       ],
       "purchase_url": "https://wa.me/85252417448?text=%E6%83%B3%E8%A8%82%E3%80%90%E8%8C%B6%E6%A8%B9%E7%B6%A0%E8%B1%86%E6%BF%95%E6%95%8F%E8%86%8F%20HK%2490%E3%80%91",
-      "image_url": "/static/sales/ointments/ointment_chashu_lvdou.jpg",
+      "image_url": "data/media/products/ointment_chashu_lvdou.jpg",
       "image_source": "心宜中醫 (Care Plus) 官方產品照",
       "key_benefit": "止痕消炎、輕度痕癢首選"
     },
@@ -459,7 +459,7 @@
         "蛋類嚴重過敏者忌"
       ],
       "purchase_url": "https://wa.me/85252417448?text=%E6%83%B3%E8%A8%82%E3%80%90%E8%9B%8B%E9%BB%83%E6%B2%B9%E4%B9%B3%E6%B6%B2%20HK%24120%E3%80%91",
-      "image_url": "/static/sales/ointments/ointment_danhuang_lotion.jpg",
+      "image_url": "data/media/products/ointment_danhuang_lotion.jpg",
       "image_source": "心宜中醫 (Care Plus) 官方產品照",
       "key_benefit": "深層滋潤、敏感肌專用、BB都用得"
     },
@@ -506,7 +506,7 @@
         "皮膚滲液 / 感染期需要面診"
       ],
       "purchase_url": "https://wa.me/85252417448?text=%E6%83%B3%E8%A8%82%E3%80%90%E6%AD%A2%E7%97%95%E6%BF%95%E7%96%B9%E8%86%8F%20HK%24180%E3%80%91",
-      "image_url": "/static/sales/ointments/ointment_zhihen_shizhen.jpg",
+      "image_url": "data/media/products/ointment_zhihen_shizhen.jpg",
       "image_source": "心宜中醫 (Care Plus) 官方產品照",
       "key_benefit": "中度至嚴重濕疹專用、心宜中醫自家配方"
     }

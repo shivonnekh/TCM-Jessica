@@ -101,10 +101,22 @@ class FAQAgent:
 
         cards_used = [h.card.card_id for h in hits]
 
+        # ALWAYS include the full top-card content so Writer can give
+        # procedural (how-to / recipe) answers, not just abstract facts.
+        top = hits[0]
+        top_card_content = {
+            "card_id": top.card.card_id,
+            "title": top.card.title,
+            "core_answer": top.card.core_answer,
+            "supporting_points": list(top.card.supporting_points[:6]),
+            "next_best_question": top.card.next_best_question or None,
+        }
+
         # If no LLM client provided, return the top hit's core_answer directly
         # as a single fact (useful for tests / offline mode).
         if self._client is None:
             payload = _offline_fallback_payload(hits)
+            payload["top_card_content"] = top_card_content
             output = SpecialistOutput(
                 specialist=SpecialistName.FAQ,
                 payload=payload,
@@ -134,6 +146,10 @@ class FAQAgent:
             logger.warning("faq JSON parse failed (%s); raw=%r", exc, raw)
             payload = _offline_fallback_payload(hits)
             payload["confidence"] = 0.3  # downgrade — we fell back
+
+        # Always pass the top-card raw content so Writer can compose a
+        # detailed how-to / recipe answer rather than terse facts.
+        payload["top_card_content"] = top_card_content
 
         output = SpecialistOutput(
             specialist=SpecialistName.FAQ,

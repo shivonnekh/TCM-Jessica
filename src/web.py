@@ -113,6 +113,11 @@ app.include_router(whatsapp_router)
 if MEDIA_DIR.is_dir():
     app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
 
+# Dev sandbox UI — http://localhost:8000/dev/ to test pipeline without WhatsApp.
+DEV_UI_DIR = ROOT / "static" / "dev"
+if DEV_UI_DIR.is_dir():
+    app.mount("/dev", StaticFiles(directory=str(DEV_UI_DIR), html=True), name="dev")
+
 
 # -------------------------------------------------------------------
 # Routes
@@ -122,6 +127,87 @@ if MEDIA_DIR.is_dir():
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "tcm-jessica"}
+
+
+@app.post("/api/dev-chat")
+async def dev_chat(request: Request) -> JSONResponse:
+    """Dev-sandbox pipeline runner.
+
+    Bypasses WhatsApp + buffer/merge entirely. Accepts:
+        { phone: str, text: str?, image: {b64, mime, name}?, audio: {b64, mime}? }
+    Saves any image to /tmp + transcribes any audio via Whisper, then
+    runs the pipeline synchronously and returns the bubble list + media.
+    """
+    import base64
+    import secrets
+    from pathlib import Path as _Path
+
+    from src.llm_transcribe import transcribe_audio
+    from src.whatsapp.router import _MEDIA_TMP_DIR
+
+    body = await request.json()
+    phone = (body.get("phone") or "").strip()
+    text = (body.get("text") or "").strip()
+    image = body.get("image") or None
+    audio = body.get("audio") or None
+
+    if not phone:
+        return JSONResponse({"error": "missing phone"}, status_code=400)
+
+    pipeline: JessicaPipeline = request.app.state.pipeline
+    media_urls: list[str] = []
+    transcript: str = ""
+
+    # 1. Image → /tmp file → path in media_urls (Constitution Agent reads it)
+    if image and isinstance(image, dict) and image.get("b64"):
+        try:
+            ext = {
+                "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+                "image/webp": "webp", "image/gif": "gif",
+            }.get(image.get("mime", "").lower(), "jpg")
+            tag = secrets.token_hex(6)
+            p = _Path(_MEDIA_TMP_DIR) / f"dev_{tag}.{ext}"
+            p.write_bytes(base64.b64decode(image["b64"]))
+            media_urls.append(str(p))
+            logger.info("[dev] saved image %d bytes → %s", p.stat().st_size, p)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[dev] image decode failed: %s", exc)
+
+    # 2. Audio → Whisper → append to text
+    if audio and isinstance(audio, dict) and audio.get("b64"):
+        try:
+            raw = base64.b64decode(audio["b64"])
+            transcript = await transcribe_audio(
+                raw, filename_hint=f"dev_voice_{secrets.token_hex(4)}.webm"
+            )
+            if transcript:
+                text = (text + " " + transcript).strip() if text else transcript
+                logger.info("[dev] transcript: %r", transcript[:120])
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[dev] transcribe failed: %s", exc)
+
+    # 3. Pipeline
+    try:
+        result = await pipeline.run_turn(
+            phone=phone,
+            user_message=text or "(media only)",
+            media_urls=media_urls,
+            wa_message_id=f"dev_{secrets.token_hex(6)}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[dev] pipeline error")
+        return JSONResponse({"error": f"pipeline: {exc}"}, status_code=500)
+
+    return JSONResponse(
+        {
+            "turn_id": result.turn_id,
+            "bubbles": result.writer_output.bubbles,
+            "media_to_send": [
+                dict(m) for m in (result.writer_output.media_to_send or [])
+            ],
+            "transcript": transcript or None,
+        }
+    )
 
 
 @app.get("/trace/{turn_id}")

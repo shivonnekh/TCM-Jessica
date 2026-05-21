@@ -151,6 +151,12 @@ class JessicaPipeline:
             # 5. Apply suggested CRM diffs from specialists
             user_after = _apply_specialist_diffs(user_for_planner, outputs)
 
+            # Defensive media filter — Writer LLM has been observed to
+            # hallucinate URLs like 'https://example.com/ointment1.jpg'
+            # even when told to copy verbatim. Whitelist outbound media
+            # to ONLY URLs that actually appear in specialist payloads.
+            writer_output = _filter_media_to_payload_only(writer_output, outputs)
+
             # Append the inbound user message NOW (post-pipeline) so
             # next turn's agents see it as prior history, but THIS turn's
             # is_first_touch logic saw a clean pre-turn snapshot.
@@ -370,6 +376,65 @@ def _apply_specialist_diffs(user: User, outputs: list[SpecialistOutput]) -> User
             changes[k] = v
 
     return user.with_updates(**changes) if changes else user
+
+
+def _collect_payload_urls(outputs: list[SpecialistOutput]) -> list[str]:
+    """Walk every specialist payload + tools_called result, pull out
+    every absolute URL we trust to actually exist on our server or a
+    well-known image host."""
+    urls: list[str] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, str):
+            if node.startswith(("http://", "https://")) and (
+                "tcm-jessica.onrender.com" in node
+                or "localhost" in node
+                or "127.0.0.1" in node
+                # external images from KB cards (healthy-food.hk etc.)
+                or "healthy-food.hk" in node
+                or "careplustcm.com" in node
+            ):
+                urls.append(node)
+        elif isinstance(node, dict):
+            for v in node.values():
+                visit(v)
+        elif isinstance(node, list):
+            for v in node:
+                visit(v)
+
+    for o in outputs:
+        visit(o.payload)
+        visit(o.tools_called)
+    return urls
+
+
+def _filter_media_to_payload_only(
+    writer_output: WriterOutput, outputs: list[SpecialistOutput]
+) -> WriterOutput:
+    """Drop any media_to_send URL that did not appear in any specialist
+    payload. Writer LLM hallucinates URLs occasionally — this is the
+    last line of defence so the user never sees 'example.com/...'."""
+    trusted = set(_collect_payload_urls(outputs))
+    cleaned: list[dict[str, Any]] = []
+    for m in (writer_output.media_to_send or []):
+        url = m.get("url", "")
+        if url in trusted:
+            cleaned.append(m)
+        else:
+            logger.warning("[media] dropping non-payload URL: %r", url[:120])
+
+    # If Writer produced nothing valid but specialists did surface
+    # product images, auto-inject them so the user sees the products
+    # they were just told about.
+    if not cleaned and trusted:
+        # Limit to first 3 images to avoid flooding.
+        for i, url in enumerate(list(trusted)[:3]):
+            cleaned.append({"url": url, "after_bubble_idx": i})
+
+    return WriterOutput(
+        bubbles=list(writer_output.bubbles),
+        media_to_send=cleaned,
+    )
 
 
 def _diff_user(before: User, after: User) -> dict[str, Any]:

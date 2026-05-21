@@ -65,14 +65,40 @@
           "price_display": "HK$90",
           "size": "30g",
           "made_in": "Hong Kong",
-          "ingredients": ["澳洲茶樹精油 (Australian Tea Tree Oil)", "綠豆"],
-          "indications": ["輕度濕疹", "皮膚過敏", "蚊咬", "皮膚紅", "輕度痕癢"],
-          "constitution_match": ["濕熱", "any"],
-          "complaint_keywords": ["輕度痕", "皮膚紅", "蚊咬", "輕微濕疹", "敏感", "茶樹"],
-          "severity_match": ["mild", "moderate"],
+          "ingredients": [
+            "澳洲茶樹精油 (Australian Tea Tree Oil)",
+            "綠豆"
+          ],
+          "indications": [
+            "輕度濕疹",
+            "皮膚過敏",
+            "蚊咬",
+            "皮膚紅",
+            "輕度痕癢"
+          ],
+          "constitution_match": [
+            "濕熱",
+            "any"
+          ],
+          "complaint_keywords": [
+            "輕度痕",
+            "皮膚紅",
+            "蚊咬",
+            "輕微濕疹",
+            "敏感",
+            "茶樹"
+          ],
+          "severity_match": [
+            "mild",
+            "moderate"
+          ],
           "usage": "外用，每日 2-3 次薄塗患處",
-          "contraindications": ["孕婦慎用", "對茶樹油過敏者忌", "大面積感染傷口忌"],
-          "image_url": "PLACEHOLDER_TO_BE_REPLACED",
+          "contraindications": [
+            "孕婦慎用",
+            "對茶樹油過敏者忌",
+            "大面積感染傷口忌"
+          ],
+          "image_url": "data/media/products/ointment_chashu_lvdou.jpg",
           "purchase_method": "whatsapp",
           "purchase_url": "https://wa.me/85252417448?text=%E6%83%B3%E8%A8%82%E3%80%90%E8%8C%B6%E6%A8%B9%E7%B6%A0%E8%B1%86%E6%BF%95%E6%95%8F%E8%86%8F%20HK%2490%E3%80%91",
           "pitch_template": "你嘅{complaint}（{constitution}體質常見），呢款{name}用澳洲茶樹油 + 綠豆，止痕消炎好溫和，30g {price_display}。"
@@ -85,16 +111,51 @@
           "price_display": "HK$120",
           "size": "100g",
           "made_in": "Hong Kong",
-          "certifications": ["無香料", "無色素", "無礦物油"],
+          "certifications": [
+            "無香料",
+            "無色素",
+            "無礦物油"
+          ],
           "extraction_method": "CO2 SFE 超臨界流體萃取法",
-          "ingredients": ["蛋黃油", "蒲背巴布", "乳木果油 (Shea Butter)"],
-          "indications": ["皮膚乾燥", "敏感肌", "嬰兒濕疹皮膚屏障修復", "日常護膚", "皮膚龜裂"],
-          "constitution_match": ["陰虛", "血虛", "any"],
-          "complaint_keywords": ["皮膚乾", "乾燥", "敏感肌", "BB皮膚", "嬰兒", "搽身", "脫皮", "龜裂", "乳液", "潤膚"],
-          "severity_match": ["mild", "preventive"],
+          "ingredients": [
+            "蛋黃油",
+            "蒲背巴布",
+            "乳木果油 (Shea Butter)"
+          ],
+          "indications": [
+            "皮膚乾燥",
+            "敏感肌",
+            "嬰兒濕疹皮膚屏障修復",
+            "日常護膚",
+            "皮膚龜裂"
+          ],
+          "constitution_match": [
+            "陰虛",
+            "血虛",
+            "any"
+          ],
+          "complaint_keywords": [
+            "皮膚乾",
+            "乾燥",
+            "敏感肌",
+            "BB皮膚",
+            "嬰兒",
+            "搽身",
+            "脫皮",
+            "龜裂",
+            "乳液",
+            "潤膚"
+          ],
+          "severity_match": [
+            "mild",
+            "preventive"
+          ],
           "usage": "外用，沐浴後或皮膚乾燥時塗抹，可全身使用",
-          "contraindications": ["蛋類嚴重過敏者忌", "傷口開放性感染期忌"],
-          "image_url": "PLACEHOLDER_TO_BE_REPLACED",
+          "contraindications": [
+            "蛋類嚴重過敏者忌",
+            "傷口開放性感染期忌"
+          ],
+          "image_url": "data/media/products/ointment_danhuang_lotion.jpg",
           "purchase_method": "whatsapp",
           "purchase_url": "https://wa.me/85252417448?text=%E6%83%B3%E8%A8%82%E3%80%90%E8%9B%8B%E9%BB%83%E6%B2%B9%E4%B9%B3%E6%B6%B2%20HK%24120%E3%80%91",
           "pitch_template": "{complaint}（{constitution}體質皮膚易乾），呢款{name}用 CO2 萃取保留活性成份，無香料色素，連 BB 都用得，100g {price_display}。"
@@ -107,13 +168,38 @@
           "price_display": "HK$180",
           "brand": "心宜中醫 Care Plus",
           "made_in": "Hong Kong",
-          "indications": ["中度濕疹", "嚴重濕疹", "頑固性痕癢", "急性發作期", "難治性皮膚痕"],
-          "constitution_match": ["濕熱", "陰虛火旺", "blood_heat"],
-          "complaint_keywords": ["嚴重濕疹", "頑固痕", "急性濕疹", "好痕", "止唔到痕", "搽乜都唔得", "皮膚發炎"],
-          "severity_match": ["moderate", "severe"],
+          "indications": [
+            "中度濕疹",
+            "嚴重濕疹",
+            "頑固性痕癢",
+            "急性發作期",
+            "難治性皮膚痕"
+          ],
+          "constitution_match": [
+            "濕熱",
+            "陰虛火旺",
+            "blood_heat"
+          ],
+          "complaint_keywords": [
+            "嚴重濕疹",
+            "頑固痕",
+            "急性濕疹",
+            "好痕",
+            "止唔到痕",
+            "搽乜都唔得",
+            "皮膚發炎"
+          ],
+          "severity_match": [
+            "moderate",
+            "severe"
+          ],
           "usage": "外用，每日 2-3 次薄塗患處；唔好大面積使用",
-          "contraindications": ["孕婦慎用", "皮膚滲液 / 感染期需要面診", "嬰幼兒先諮詢中醫師"],
-          "image_url": "PLACEHOLDER_TO_BE_REPLACED",
+          "contraindications": [
+            "孕婦慎用",
+            "皮膚滲液 / 感染期需要面診",
+            "嬰幼兒先諮詢中醫師"
+          ],
+          "image_url": "data/media/products/ointment_zhihen_shizhen.jpg",
           "purchase_method": "whatsapp",
           "purchase_url": "https://wa.me/85252417448?text=%E6%83%B3%E8%A8%82%E3%80%90%E6%AD%A2%E7%97%95%E6%BF%95%E7%96%B9%E8%86%8F%20HK%24180%E3%80%91",
           "pitch_template": "{complaint}係{constitution}體質典型，呢款{name}係心宜中醫自家配方，針對中度至嚴重情況，{price_display}。如果情況嚴重，建議都係面診中醫師。"

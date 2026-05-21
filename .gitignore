@@ -1,54 +1,48 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
-# Virtual envs
-.venv/
-venv/
-env/
-
-# Environment
-.env
-.env.local
-.env.*.local
 
 # Database
+# Environment
+# IDE
+# Logs
+# Media downloads (regenerable from WhatsApp)
+# OS
+# Python
+# Tokens / credentials
+# Traces (huge, regenerable)
+# Virtual envs
+*$py.class
 *.db
+*.egg-info/
+*.key
+*.log
+*.pem
+*.py[cod]
+*.so
 *.sqlite
 *.sqlite3
+*.swo
+*.swp
+.DS_Store
+.Python
+.coverage
+.env
+.env.*.local
+.env.local
+.idea/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.vscode/
+Thumbs.db
+__pycache__/
 data/jessica.db
-
-# Traces (huge, regenerable)
-traces/
-
-# Media downloads (regenerable from WhatsApp)
+data/jessica_dev.db
 data/media/inbound/
 data/media/tmp/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
+env/
+htmlcov/
 logs/
-
-# Tokens / credentials
 secrets/
-*.pem
-*.key
+traces/
+traces_dev/
+venv/

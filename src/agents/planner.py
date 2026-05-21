@@ -256,6 +256,33 @@ def _rule_overrides(
             ),
         )
 
+    # User asks about 藥膏 / 外用 / 搽 → Sales solo, prioritise ointments.
+    if _wants_ointment(user_message):
+        return PlannerDecision(
+            specialists=[SpecialistName.SALES],
+            mode="solo",
+            reasoning="rule: user wants ointment / topical → sales (prioritise ointments)",
+            notes_for_writer=(
+                "用戶問「塗 / 藥膏 / 外用」— 必須列我哋 3 款藥膏：茶樹綠豆濕敏膏 "
+                "$90 (輕度痕癢、蚊咬)、蛋黃油乳液 $120 (敏感肌、BB)、"
+                "止痕濕疹膏 $180 (中至重度濕疹)。每款 1 bubble + 圖。"
+            ),
+        )
+
+    # User asks for "other options / alternatives" → enumerate all
+    # solution tracks (soups + ointments + clinic + recipes).
+    if _wants_alternatives(user_message):
+        return PlannerDecision(
+            specialists=[SpecialistName.SALES, SpecialistName.APPOINTMENT],
+            mode="parallel",
+            reasoning="rule: user wants alternatives — surface multi-track options",
+            notes_for_writer=(
+                "用戶問「其他方法 / 仲有冇 / 還有」。要列**所有**選擇途徑："
+                "(1) 湯水 + 藥膏 (Sales payload), (2) 到診 + 網上視診 "
+                "(Appointment payload), (3) 免費食譜 (KB)。唔好淨講一樣。"
+            ),
+        )
+
     # First-touch BUT user already mentioned a symptom in their opening
     # message → compact intro PLUS Constitution Agent on the same turn,
     # so we don't ask "what's bothering you?" after the user already
@@ -343,6 +370,33 @@ def _wants_appointment(text: str) -> bool:
     if not text:
         return False
     return any(kw in text for kw in _APPOINTMENT_INTENT_KEYWORDS)
+
+
+# Topical / ointment intent (we have 3 ointments).
+_OINTMENT_INTENT_KEYWORDS = (
+    "塗", "涂", "搽", "藥膏", "药膏", "膏", "外用", "外搽",
+    "topical", "cream", "ointment", "lotion",
+)
+
+
+def _wants_ointment(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _OINTMENT_INTENT_KEYWORDS)
+
+
+# "Are there other / additional options?" signals — surface multi-track.
+_ALTERNATIVES_INTENT_KEYWORDS = (
+    "其他方法", "其他選擇", "其他选择", "其他辦法", "其他办法",
+    "仲有冇", "还有什么", "還有", "还有",
+    "其他嘅", "其他的", "alternative", "other option", "another",
+)
+
+
+def _wants_alternatives(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _ALTERNATIVES_INTENT_KEYWORDS)
 
 
 # -------------------------------------------------------------------

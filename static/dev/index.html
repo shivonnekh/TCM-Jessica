@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<title>Jessica · Dev Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #ECE5DD;            /* WhatsApp bg */
+    --in: #ffffff;             /* incoming bubble */
+    --out: #DCF8C6;            /* outgoing bubble */
+    --line: #d1d5db;
+    --accent: #128C7E;
+    --muted: #6b7280;
+    --warn: #c44d3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    background: var(--accent); color: white;
+    padding: 0.75rem 1rem; display: flex; align-items: center;
+    gap: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  header .avatar {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: white; display: flex; align-items: center;
+    justify-content: center; color: var(--accent); font-weight: 700;
+  }
+  header h1 { font-size: 1rem; margin: 0; }
+  header .sub { font-size: 0.75rem; opacity: 0.85; }
+  header .controls { margin-left: auto; display: flex; gap: 0.5rem; }
+  header button {
+    background: rgba(255,255,255,0.15); color: white;
+    border: 0; border-radius: 6px; padding: 0.35rem 0.75rem;
+    font-size: 0.8rem; cursor: pointer;
+  }
+  header button:hover { background: rgba(255,255,255,0.25); }
+
+  #chat {
+    flex: 1; padding: 1rem; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 0.4rem;
+  }
+  .bubble {
+    max-width: 78%; padding: 0.5rem 0.7rem; border-radius: 10px;
+    line-height: 1.4; font-size: 0.95rem; word-wrap: break-word;
+    box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+    position: relative;
+  }
+  .bubble.in  { background: var(--in);  align-self: flex-start;  border-top-left-radius: 0; }
+  .bubble.out { background: var(--out); align-self: flex-end;    border-top-right-radius: 0; }
+  .bubble img { max-width: 220px; border-radius: 6px; display: block; }
+  .bubble .ts { font-size: 0.65rem; color: var(--muted); margin-top: 0.2rem; text-align: right; }
+  .bubble.sys { background: rgba(0,0,0,0.05); color: var(--muted); align-self: center; font-size: 0.8rem; max-width: 90%; text-align: center; }
+  .typing { font-style: italic; color: var(--muted); align-self: flex-start; font-size: 0.85rem; padding: 0.3rem 0.6rem; }
+
+  footer {
+    background: white;
+    padding: 0.5rem 0.75rem; display: flex; align-items: center;
+    gap: 0.5rem; border-top: 1px solid var(--line);
+  }
+  footer input[type=text] {
+    flex: 1; border: 1px solid var(--line); border-radius: 24px;
+    padding: 0.55rem 1rem; font-size: 0.95rem; outline: none;
+  }
+  footer input[type=text]:focus { border-color: var(--accent); }
+  footer button {
+    background: var(--accent); color: white;
+    border: 0; border-radius: 50%; width: 40px; height: 40px;
+    cursor: pointer; font-size: 1.05rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  footer button:disabled { background: var(--muted); opacity: 0.6; cursor: not-allowed; }
+  footer button.alt { background: #555; }
+  footer button.rec { background: var(--warn); }
+  footer .icon-btn { background: transparent; color: var(--accent); }
+  footer .icon-btn:hover { background: rgba(18,140,126,0.1); }
+
+  .meta-bar {
+    background: rgba(255,255,255,0.7); padding: 0.4rem 1rem;
+    font-size: 0.75rem; color: var(--muted);
+    display: flex; gap: 1rem; border-bottom: 1px solid var(--line);
+  }
+  .meta-bar .l { flex: 0 0 auto; }
+  .meta-bar .r { margin-left: auto; }
+  .meta-bar code { background: rgba(0,0,0,0.05); padding: 1px 5px; border-radius: 3px; }
+
+  /* Preview thumb in input area */
+  .preview {
+    display: flex; gap: 0.4rem; align-items: center;
+    background: #f8f6f1; padding: 0.4rem; border-radius: 6px;
+    font-size: 0.8rem; margin-left: 0.4rem;
+  }
+  .preview img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
+  .preview .remove { color: var(--warn); cursor: pointer; padding: 0 0.3rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="avatar">J</div>
+  <div>
+    <h1>Jessica · Dev Sandbox</h1>
+    <div class="sub">直接命中本地 pipeline （绕过 WhatsApp）</div>
+  </div>
+  <div class="controls">
+    <button onclick="doRestart()">RESTART</button>
+    <button onclick="copyPhone()">Phone</button>
+  </div>
+</header>
+
+<div class="meta-bar">
+  <span class="l">phone: <code id="phone-tag">+85299990001</code></span>
+  <span class="r">latest turn: <code id="turn-tag">—</code></span>
+</div>
+
+<div id="chat"></div>
+
+<footer>
+  <button class="icon-btn" title="加图" onclick="document.getElementById('imgInput').click()">📷</button>
+  <input id="imgInput" type="file" accept="image/*" style="display:none" onchange="onImagePicked(event)">
+  <button class="icon-btn" id="micBtn" title="按住讲嘢" onclick="toggleRec()">🎤</button>
+  <input id="txtInput" type="text" placeholder="打字测试…" onkeydown="if(event.key==='Enter')send()">
+  <span id="preview" class="preview" style="display:none"></span>
+  <button id="sendBtn" onclick="send()" title="发送">➤</button>
+</footer>
+
+<script>
+  // --- State ---
+  const phone = "+8529999" + Math.floor(1000 + Math.random()*9000);  // unique per browser session
+  document.getElementById("phone-tag").textContent = phone;
+  let pendingImage = null;     // {b64, mime, name}
+  let pendingAudio = null;     // {b64, mime}
+  let recording = false;
+  let mediaRecorder = null;
+  let recChunks = [];
+
+  // --- DOM helpers ---
+  const chat = document.getElementById("chat");
+  function addBubble(role, text, opts={}) {
+    const div = document.createElement("div");
+    div.className = "bubble " + (role==="user" ? "out" : role==="sys" ? "sys" : "in");
+    if (opts.image) {
+      const img = document.createElement("img");
+      img.src = opts.image;
+      div.appendChild(img);
+    }
+    if (text) {
+      const t = document.createElement("div");
+      t.textContent = text;
+      div.appendChild(t);
+    }
+    const ts = document.createElement("div");
+    ts.className = "ts";
+    ts.textContent = new Date().toLocaleTimeString().slice(0,5);
+    div.appendChild(ts);
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div;
+  }
+  function addTyping() {
+    const div = document.createElement("div");
+    div.className = "typing";
+    div.id = "typingIndicator";
+    div.textContent = "Jessica 打緊字…";
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+  function removeTyping() {
+    const el = document.getElementById("typingIndicator");
+    if (el) el.remove();
+  }
+
+  // --- Image picker ---
+  function onImagePicked(ev) {
+    const f = ev.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      pendingImage = { b64: r.result.split(",")[1], mime: f.type, name: f.name };
+      const p = document.getElementById("preview");
+      p.style.display = "inline-flex";
+      p.innerHTML = `<img src="${r.result}"><span>${f.name.slice(0,16)}</span><span class="remove" onclick="clearAttachment()">✕</span>`;
+    };
+    r.readAsDataURL(f);
+  }
+  function clearAttachment() {
+    pendingImage = null; pendingAudio = null;
+    document.getElementById("preview").style.display = "none";
+    document.getElementById("preview").innerHTML = "";
+    document.getElementById("imgInput").value = "";
+  }
+
+  // --- Voice recording ---
+  async function toggleRec() {
+    if (!recording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+        recChunks = [];
+        mediaRecorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(recChunks, { type: "audio/webm" });
+          const reader = new FileReader();
+          reader.onload = () => {
+            pendingAudio = { b64: reader.result.split(",")[1], mime: "audio/webm" };
+            const p = document.getElementById("preview");
+            p.style.display = "inline-flex";
+            p.innerHTML = `🎤 voice (${(blob.size/1024).toFixed(1)} kB)<span class="remove" onclick="clearAttachment()">✕</span>`;
+          };
+          reader.readAsDataURL(blob);
+        };
+        mediaRecorder.start();
+        recording = true;
+        document.getElementById("micBtn").classList.add("rec");
+        document.getElementById("micBtn").textContent = "■";
+      } catch (e) {
+        alert("麦克风权限被拒：" + e.message);
+      }
+    } else {
+      mediaRecorder.stop();
+      recording = false;
+      document.getElementById("micBtn").classList.remove("rec");
+      document.getElementById("micBtn").textContent = "🎤";
+    }
+  }
+
+  // --- Send turn ---
+  async function send() {
+    const text = document.getElementById("txtInput").value.trim();
+    if (!text && !pendingImage && !pendingAudio) return;
+
+    // Local echo
+    addBubble("user", text || (pendingImage ? "(image)" : "(voice)"), {
+      image: pendingImage ? `data:${pendingImage.mime};base64,${pendingImage.b64}` : null
+    });
+    document.getElementById("txtInput").value = "";
+    document.getElementById("sendBtn").disabled = true;
+    addTyping();
+
+    try {
+      const body = { phone, text };
+      if (pendingImage) body.image = pendingImage;
+      if (pendingAudio) body.audio = pendingAudio;
+      const r = await fetch("/api/dev-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      removeTyping();
+      document.getElementById("turn-tag").textContent = data.turn_id || "—";
+
+      if (data.transcript) {
+        addBubble("sys", "🎤 transcribed → " + data.transcript);
+      }
+
+      const mediaByIdx = {};
+      for (const m of (data.media_to_send || [])) {
+        const idx = parseInt(m.after_bubble_idx || 0);
+        if (!mediaByIdx[idx]) mediaByIdx[idx] = [];
+        mediaByIdx[idx].push(m.url);
+      }
+
+      const bubbles = data.bubbles || [];
+      for (let i = 0; i < bubbles.length; i++) {
+        // bubble
+        await sleep(450);
+        addBubble("jessica", bubbles[i]);
+        // any media that follows this bubble
+        for (const url of (mediaByIdx[i] || [])) {
+          await sleep(300);
+          addBubble("jessica", "", { image: url });
+        }
+      }
+      clearAttachment();
+    } catch (e) {
+      removeTyping();
+      addBubble("sys", "⚠️ " + e.message);
+    } finally {
+      document.getElementById("sendBtn").disabled = false;
+    }
+  }
+
+  // --- Restart / utility ---
+  async function doRestart() {
+    addBubble("sys", "→ sending RESTART…");
+    document.getElementById("txtInput").value = "RESTART";
+    await send();
+  }
+  function copyPhone() {
+    navigator.clipboard.writeText(phone);
+    addBubble("sys", "phone copied: " + phone);
+  }
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // Welcome line
+  addBubble("sys", "Dev sandbox. 试下 'hi'，或者上传脷相，或者按 🎤 录音。");
+</script>
+
+</body>
+</html>

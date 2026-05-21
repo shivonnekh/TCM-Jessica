@@ -105,13 +105,20 @@ class SalesAgent:
         user = inp.user
 
         # Detect "where to buy / 邊度買" intent. When user explicitly asks
-        # about how/where to purchase, we should RE-SHOW the products they
-        # were already pitched + provide the order channel, NOT say
-        # "no new products" because of the one-pitch-per-session rule.
+        # about how/where to purchase, we always show real products with
+        # names + prices + images — never deflect to customer service.
         wants_where = _wants_where_to_buy(inp.user_message)
-        if wants_where and user.products_pitched:
+        if wants_where:
             return (
                 self._where_to_buy_output(user, inp.user_message),
+                _no_llm_usage(),
+            )
+
+        # Detect ointment intent — user explicitly asks about creams /
+        # 藥膏 / 塗. Hard-code surface all 3 ointments with images.
+        if _wants_ointment_local(inp.user_message):
+            return (
+                self._ointments_output(user),
                 _no_llm_usage(),
             )
 
@@ -301,27 +308,95 @@ class SalesAgent:
             tools_called=tools_log,
         )
 
+    def _ointments_output(self, user: Any) -> SpecialistOutput:
+        """Hard-coded surface of all 3 ointments. Bypasses scoring —
+        user explicitly asked for topicals."""
+        ointments = [
+            p for p in self._catalog.all_products if p.product_type == "ointment"
+        ]
+        products = [_product_dict_simple(p) for p in ointments]
+        whatsapp = os.environ.get("ORDER_WHATSAPP", "+852 5241 7448")
+        clean = whatsapp.lstrip("+").replace(" ", "")
+        payload = {
+            "intent": "pitch_products",
+            "products_to_pitch": products,
+            "active_offers": [
+                _promo_dict(p)
+                for p in self._promotions.for_stage(
+                    "sales_close", applies_to="product_pitch"
+                )
+            ],
+            "stage": "ointment_pitch",
+            "order_channel": {
+                "whatsapp": whatsapp,
+                "url": f"https://wa.me/{clean}",
+            },
+            "writer_hint": (
+                "用戶問藥膏。**必須**列晒呢 3 款 (名 + 價錢 + 1 句用途)，"
+                "每款 1 bubble + 圖。最尾講 order WhatsApp 連結。"
+            ),
+        }
+        return SpecialistOutput(
+            specialist=SpecialistName.SALES,
+            payload=payload,
+            suggested_user_state_diff={
+                "products_pitched_append": [p["product_id"] for p in products],
+            },
+            cards_used=[],
+            tools_called=[
+                {
+                    "name": "Sales.ointments_lookup",
+                    "args": {},
+                    "result": {"count": len(products)},
+                }
+            ],
+        )
+
     def _where_to_buy_output(
         self, user: Any, user_message: str
     ) -> SpecialistOutput:
-        """User asked HOW / WHERE to buy. Re-show what they were
-        previously pitched + the order channel. This BYPASSES the
-        one-pitch-per-session rule because the user is now asking the
-        purchase question explicitly."""
-        # Re-fetch products by id from the catalog (preserve pitch order).
-        previously: list[dict[str, Any]] = []
-        all_products = {p.product_id: p for p in self._catalog.all_products()}
-        for pid in user.products_pitched[-3:]:  # at most last 3 pitched
-            prod = all_products.get(pid)
-            if prod is None:
-                continue
-            previously.append(_product_dict_simple(prod))
+        """User asked HOW / WHERE to buy. Always show real products with
+        names + prices + images + order channel — never deflect.
+
+        Pick logic:
+          - If user has products_pitched → re-show those (continuity).
+          - Otherwise → broad catalog match (no constitution required)
+            and surface top 3-4 most-relevant soups.
+        """
+        all_products = {p.product_id: p for p in self._catalog.all_products}
+
+        chosen: list[dict[str, Any]] = []
+        if user.products_pitched:
+            for pid in user.products_pitched[-3:]:
+                prod = all_products.get(pid)
+                if prod is not None:
+                    chosen.append(_product_dict_simple(prod))
+
+        if not chosen:
+            # Broad pitch — no constitution filter. Let the catalog rank
+            # by pain_points / tags it has, else fall back to first N.
+            candidates = self._catalog.match_products(
+                constitution=user.constitution.value if user.constitution else None,
+                pain_points=list(user.pain_points),
+                already_pitched=[],   # ignore one-pitch rule for explicit ask
+                user_tags=list(user.tags),
+                user_notes=user.notes,
+                max_results=4,
+                min_score=0.0,        # accept anything
+            )
+            if not candidates:
+                # Truly nothing scored — just take the first 4 from catalog.
+                for prod in list(all_products.values())[:4]:  # noqa: PLR2004
+                    chosen.append(_product_dict_simple(prod))
+            else:
+                for pm in candidates[:4]:
+                    chosen.append(_product_dict_simple(pm.product))
 
         whatsapp = os.environ.get("ORDER_WHATSAPP", "+852 5241 7448")
         clean = whatsapp.lstrip("+").replace(" ", "")
         payload = {
             "intent": "where_to_buy",
-            "products_to_pitch": previously,
+            "products_to_pitch": chosen,
             "active_offers": [
                 _promo_dict(p)
                 for p in self._promotions.for_stage(
@@ -339,26 +414,35 @@ class SalesAgent:
                 "made_by": "Care Plus 心宜中醫",
             },
             "writer_hint": (
-                "用戶問點買 / 邊度買。直接俾佢 order WhatsApp 號碼 + 連結，"
-                "重複講之前 pitched 嘅產品名 + 價錢。"
-                "絕對唔好講「市售產品 / 唔係我哋做嘅 / 冇新產品」 — "
-                "Care Plus 自己出 10 款湯水 + 3 款藥膏。"
+                "用戶問點買 / 想要產品。**必須**列晒 products_to_pitch 入面每"
+                "款 (名 + 價錢 HK$)，每款 1 個 bubble，並且每款都要附返"
+                "image_url 落 media_to_send。最尾加一個 bubble 講 order "
+                "WhatsApp 號碼 + 連結。**絕對唔好**只講「我哋有 10 款」"
+                "然後叫客 WhatsApp 客服自己問 — 必須立刻 show 產品。"
             ),
             "writer_must_not_say": [
                 "我哋冇新產品",
                 "市售產品",
                 "唔係我哋自己做",
+                "WhatsApp 客服問",
+                "自己問客服",
             ],
         }
         return SpecialistOutput(
             specialist=SpecialistName.SALES,
             payload=payload,
+            suggested_user_state_diff={
+                "products_pitched_append": [p["product_id"] for p in chosen]
+            },
             cards_used=[],
             tools_called=[
                 {
                     "name": "Sales.where_to_buy_lookup",
-                    "args": {"products_pitched_count": len(user.products_pitched)},
-                    "result": {"reshown": [p["product_id"] for p in previously]},
+                    "args": {
+                        "products_pitched_count": len(user.products_pitched),
+                        "chosen_count": len(chosen),
+                    },
+                    "result": {"reshown": [p["product_id"] for p in chosen]},
                 }
             ],
         )
@@ -385,6 +469,18 @@ def _wants_where_to_buy(text: str) -> bool:
     if not text:
         return False
     return any(kw in text for kw in _WHERE_TO_BUY_KEYWORDS)
+
+
+_OINTMENT_KEYWORDS_LOCAL = (
+    "塗", "涂", "搽", "藥膏", "药膏", "外用", "外搽",
+    "cream", "ointment", "lotion",
+)
+
+
+def _wants_ointment_local(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _OINTMENT_KEYWORDS_LOCAL)
 
 
 def _product_dict_simple(prod: Any) -> dict[str, Any]:
