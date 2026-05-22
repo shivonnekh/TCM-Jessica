@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from src.llm import LLMClient
@@ -252,7 +253,7 @@ class WriterAgent:
         client: LLMClient,
         *,
         model: str = DEFAULT_MODEL,
-        max_tokens: int = 700,
+        max_tokens: int = 1500,
     ) -> None:
         self._client = client
         self._model = model
@@ -313,9 +314,21 @@ class WriterAgent:
             specialist_outputs=ordered,
         )
 
+        # Adaptive token cap — long catalog scenarios (10 soups) need
+        # more headroom; chitchat doesn't.
+        n_products = 0
+        for o in specialist_outputs:
+            if isinstance(o.payload, dict):
+                n_products = max(
+                    n_products, len(o.payload.get("products_to_pitch", []) or [])
+                )
+        adaptive_max = self._max_tokens
+        if n_products >= 6:
+            adaptive_max = max(adaptive_max, 2000)
+
         response = await self._client.messages.create(
             model=self._model,
-            max_tokens=self._max_tokens,
+            max_tokens=adaptive_max,
             system=self._system,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -334,11 +347,25 @@ class WriterAgent:
                 media_to_send=data.get("media_to_send", []),
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("writer JSON parse failed (%s); raw=%r", exc, raw)
-            output = WriterOutput(
-                bubbles=["唔好意思啊，我而家有啲問題，等陣再試多次 🙏"],
-                media_to_send=[],
+            stop_reason = getattr(response, "stop_reason", "?")
+            logger.warning(
+                "writer JSON parse failed (%s); stop=%s; raw_len=%d; raw_tail=%r",
+                exc, stop_reason, len(raw), raw[-200:],
             )
+            # Salvage path — try to extract any bubble-shaped strings
+            # so we still send something useful instead of the apology.
+            salvaged = _salvage_bubbles(raw)
+            if salvaged:
+                logger.info("writer: salvaged %d bubble(s) from truncated JSON", len(salvaged))
+                output = WriterOutput(
+                    bubbles=salvaged[:MAX_BUBBLES],
+                    media_to_send=[],
+                )
+            else:
+                output = WriterOutput(
+                    bubbles=["唔好意思啊，我而家有啲問題，等陣再試多次 🙏"],
+                    media_to_send=[],
+                )
 
         usage = {
             "model": self._model,
@@ -423,3 +450,44 @@ def _extract_json(text: str) -> dict[str, Any]:
     if start == -1 or end == -1:
         raise ValueError(f"no JSON: {text[:200]!r}")
     return json.loads(text[start : end + 1])
+
+
+# Match strings inside a "bubbles" array of a truncated / malformed JSON.
+# Picks up "..." occurrences after `"bubbles":` until end of buffer.
+_BUBBLE_STR_RE = re.compile(
+    r'"((?:[^"\\]|\\.)*)"',
+    re.DOTALL,
+)
+
+
+def _salvage_bubbles(raw: str) -> list[str]:
+    """Try to pull bubble strings out of a truncated Writer response.
+
+    Use case: LLM hit max_tokens mid-bubble and the closing ] / } never
+    arrived, so json.loads fails. We still want to send the bubbles that
+    DID complete instead of the apology fallback.
+    """
+    if not raw:
+        return []
+    # Find the "bubbles" key
+    idx = raw.find('"bubbles"')
+    if idx == -1:
+        return []
+    # Find the opening [
+    arr_start = raw.find("[", idx)
+    if arr_start == -1:
+        return []
+    # Stop at the next ] OR at "media_to_send" (next field) OR end
+    arr_end = raw.find("]", arr_start)
+    next_field = raw.find('"media_to_send"', arr_start)
+    if next_field != -1 and (arr_end == -1 or next_field < arr_end):
+        arr_end = next_field
+    if arr_end == -1:
+        arr_end = len(raw)
+    arr_body = raw[arr_start + 1 : arr_end]
+    out: list[str] = []
+    for m in _BUBBLE_STR_RE.finditer(arr_body):
+        s = m.group(1).replace('\\n', '\n').replace('\\"', '"').strip()
+        if s and len(s) < 500:
+            out.append(s)
+    return out
