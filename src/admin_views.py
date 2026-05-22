@@ -46,6 +46,13 @@ from src.agents import (
     writer,
 )
 from src.agents.base import SPECIALIST_CATALOG, render_specialist_menu_zh
+from src.crm.models import Constitution
+from src.tools.acupoint_images import AcupointImageMap
+from src.tools.kb_index import KBIndex
+from src.tools.pitch_playbook import PitchPlaybook
+from src.tools.product_catalog import ProductCatalog
+from src.tools.promotions import PromotionsLoader
+from src.tools.recipe_extractor import RecipeExtractor
 from src.trace.writer import TraceWriter
 
 router = APIRouter(tags=["admin"])
@@ -173,8 +180,12 @@ _AGENT_META: list[dict[str, Any]] = [
         "module": faq_agent,
         "model_attr": "DEFAULT_MODEL",
         "file": "src/agents/faq_agent.py",
-        "purpose": "TCM 知识问答 / 食谱清单。KB 检索 + LLM 抽 facts",
-        "tools": ["KBSearch (52 cards)", "RecipeExtractor (128 free recipes)"],
+        "purpose": "TCM 知识问答 / 食谱清单。KB 检索 + LLM 抽 facts，automatic 穴位图 surface",
+        "tools": [
+            "KBSearch (hybrid keyword + pgvector semantic)",
+            "RecipeExtractor (128 free recipes)",
+            "AcupointImageMap (24 points + images / videos)",
+        ],
         "kb": ["data/knowledge_base/* (52 cards)"],
         "prompt_attr": "_SYSTEM",
         "max_tokens_attr": None,
@@ -185,9 +196,13 @@ _AGENT_META: list[dict[str, Any]] = [
         "module": sales_agent,
         "model_attr": "DEFAULT_MODEL",
         "file": "src/agents/sales_agent.py",
-        "purpose": "Pitch 付费产品 (10 汤水 + 3 药膏)，handle '邊度買' / 药膏 / 推荐",
-        "tools": ["ProductCatalog (13 paid products)", "PromotionsLoader (3 offers)"],
-        "kb": ["data/products/* (paid catalog)"],
+        "purpose": "Pitch 付费产品。Playbook-driven category match → safety+方向 tone → consultation backstop",
+        "tools": [
+            "ProductCatalog (13 paid products)",
+            "PromotionsLoader (3 offers, multi-stage)",
+            "PitchPlaybook (8 condition categories)",
+        ],
+        "kb": ["data/products/*", "data/promotions/pitch_playbook.json"],
         "prompt_attr": "_SYSTEM",
         "max_tokens_attr": None,
     },
@@ -197,8 +212,14 @@ _AGENT_META: list[dict[str, Any]] = [
         "module": constitution_agent,
         "model_attr": "DEFAULT_MODEL",
         "file": "src/agents/constitution_agent.py",
-        "purpose": "九体质评估，4-phase (ask_tongue → vision → 4 MCQs → declare with probabilities)",
-        "tools": ["Claude Vision (脷相)", "RecipeExtractor", "ProductCatalog", "KBSearch", "PromotionsLoader"],
+        "purpose": "九体质评估，4-phase (ask_tongue → vision → 4 MCQs → declare with probability ranking)",
+        "tools": [
+            "Vision (脷相)",
+            "RecipeExtractor (free recipe pitch)",
+            "ProductCatalog",
+            "KBSearch (hybrid)",
+            "PromotionsLoader",
+        ],
         "kb": [
             "data/knowledge_base/constitution/* (4 cards)",
             "data/knowledge_base/soups/tcm_food_therapy_soups*.json (128 recipes)",
@@ -291,18 +312,194 @@ async def admin_index() -> HTMLResponse:
         </div>
         """)
 
+    data_section = _render_data_sections()
+
     body = f"""
     <h1>Agent Config Inspector</h1>
-    <div class="sub">7 个 agent 嘅 prompt / model / 工具 / KB。Read-only。</div>
+    <div class="sub">7 个 agent + 跑落 data。Read-only。修改: 编辑 file → push → Render 自动 redeploy</div>
 
     <div class="card">
       <h3 style="margin-top:0;">Specialist Routing Menu (Planner 见到嘅)</h3>
       <pre>{html.escape(render_specialist_menu_zh())}</pre>
     </div>
 
+    <h2>Agents</h2>
     {''.join(cards)}
+
+    <h2>Data & Playbooks</h2>
+    <div class="sub">All these JSON live in <code>data/</code>. Editing them = changing behaviour without code.</div>
+    {data_section}
     """
     return HTMLResponse(_wrap_page("Agent Config", "agents", body))
+
+
+# -------------------------------------------------------------------
+# Data & Playbook section rendering
+# -------------------------------------------------------------------
+
+
+def _render_data_sections() -> str:
+    parts: list[str] = []
+
+    # --- Pitch Playbook ---
+    try:
+        pb = PitchPlaybook()
+        cat_rows = []
+        for c in pb.categories:
+            cat_rows.append(
+                f"<tr><td><code>{html.escape(c.key)}</code></td>"
+                f"<td>{html.escape('、'.join(c.keywords))}</td>"
+                f"<td>{html.escape('、'.join(c.soup_ids) or '—')}</td>"
+                f"<td>{html.escape('、'.join(c.ointment_ids) or '—')}</td>"
+                f"<td>{html.escape(c.pitch_angle)}</td></tr>"
+            )
+        parts.append(f"""
+        <div class="card">
+          <h3 style="margin-top:0;">🎯 Pitch Playbook
+            <span class="pill gray">data/promotions/pitch_playbook.json</span></h3>
+          <div class="sub">Sales Agent 嘅 condition-→-product 决定表 + 软性 tone 规则</div>
+          <div class="kv" style="margin-bottom:0.8rem;">
+            <div class="k">Safety disclaimer</div><div>「{html.escape(pb.safety_disclaimer)}」</div>
+            <div class="k">Consultation backstop</div><div>「{html.escape(pb.consultation_backstop)}」</div>
+            <div class="k">Tone rule</div><div>{html.escape(pb.global_rules.get('tone',''))}</div>
+          </div>
+          <table>
+            <thead><tr><th>category</th><th>keywords</th><th>soups</th><th>ointments</th><th>方向 / pitch angle</th></tr></thead>
+            <tbody>{''.join(cat_rows)}</tbody>
+          </table>
+        </div>""")
+    except Exception as exc:  # noqa: BLE001
+        parts.append(f'<div class="card"><span class="tag red">playbook load failed: {html.escape(str(exc))}</span></div>')
+
+    # --- Active Offers ---
+    try:
+        pl = PromotionsLoader()
+        all_offers = pl.all_offers()
+        rows = []
+        for o in all_offers:
+            # Re-load raw record from JSON for trigger_stages + positioning
+            stages = "—"
+            positioning = "—"
+            role = "—"
+            for raw in pl._offers_raw:  # noqa: SLF001
+                if raw.get("id") == o.id:
+                    stages_l = raw.get("trigger_stages") or [raw.get("trigger_stage", "")]
+                    stages = ", ".join(s for s in stages_l if s)
+                    positioning = raw.get("positioning", "")
+                    role = raw.get("role", "")
+                    break
+            rows.append(f"""<tr>
+              <td><code>{html.escape(o.id)}</code></td>
+              <td><strong>{html.escape(o.title_zh)}</strong><br/><span class="tag muted">{html.escape(role)}</span></td>
+              <td>{html.escape(o.description_zh)}</td>
+              <td>{html.escape(positioning)}</td>
+              <td><span class="tag muted">{html.escape(stages)}</span></td>
+            </tr>""")
+        parts.append(f"""
+        <div class="card">
+          <h3 style="margin-top:0;">🏷️ Active Offers
+            <span class="pill gray">data/promotions/active_offers.json</span></h3>
+          <div class="sub">3 promotion hooks + 边几个 conversational stage 会 surface</div>
+          <table>
+            <thead><tr><th>id</th><th>title / role</th><th>desc</th><th>positioning</th><th>trigger_stages</th></tr></thead>
+            <tbody>{''.join(rows)}</tbody>
+          </table>
+        </div>""")
+    except Exception as exc:  # noqa: BLE001
+        parts.append(f'<div class="card"><span class="tag red">offers load failed: {html.escape(str(exc))}</span></div>')
+
+    # --- Product Catalog ---
+    try:
+        cat = ProductCatalog()
+        soup_rows = []
+        oint_rows = []
+        for p in cat.all_products:
+            row = (
+                f"<tr><td><code>{html.escape(p.product_id)}</code></td>"
+                f"<td><strong>{html.escape(p.name)}</strong></td>"
+                f"<td>${p.price_hkd}</td>"
+                f"<td>{html.escape('、'.join((p.indications or [])[:4]))}</td>"
+                f"<td>{html.escape('、'.join(p.constitution_match or []))}</td>"
+                f"<td>{html.escape('、'.join((p.contraindications or [])[:3]) or '—')}</td></tr>"
+            )
+            (soup_rows if p.product_type == "soup" else oint_rows).append(row)
+        parts.append(f"""
+        <div class="card">
+          <h3 style="margin-top:0;">🍲 Product Catalog
+            <span class="pill gray">data/products/*.json</span></h3>
+          <details open><summary><strong>湯水 ({len(soup_rows)} 款)</strong></summary>
+            <div class="body"><table><thead><tr><th>id</th><th>name</th><th>$</th><th>indications</th><th>constitution_match</th><th>contraindications</th></tr></thead><tbody>{''.join(soup_rows)}</tbody></table></div></details>
+          <details><summary><strong>藥膏 ({len(oint_rows)} 款)</strong></summary>
+            <div class="body"><table><thead><tr><th>id</th><th>name</th><th>$</th><th>indications</th><th>constitution_match</th><th>contraindications</th></tr></thead><tbody>{''.join(oint_rows)}</tbody></table></div></details>
+        </div>""")
+    except Exception as exc:  # noqa: BLE001
+        parts.append(f'<div class="card"><span class="tag red">catalog load failed: {html.escape(str(exc))}</span></div>')
+
+    # --- Acupoint Library ---
+    try:
+        am = AcupointImageMap()
+        rows = []
+        for pt in am.all_points:
+            img_tag = '<span class="tag green">✓</span>' if pt.image_path else '<span class="tag muted">—</span>'
+            vid_tag = '<span class="tag green">✓</span>' if pt.video_path else '<span class="tag muted">—</span>'
+            rows.append(
+                f"<tr><td><strong>{html.escape(pt.zh)}</strong></td>"
+                f"<td>{html.escape('、'.join(pt.aliases))}</td>"
+                f"<td>{img_tag}</td><td>{vid_tag}</td></tr>"
+            )
+        img_n = sum(1 for pt in am.all_points if pt.image_path)
+        vid_n = sum(1 for pt in am.all_points if pt.video_path)
+        parts.append(f"""
+        <div class="card">
+          <h3 style="margin-top:0;">📍 Acupoint Library
+            <span class="pill gray">data/acupoints/index.json</span></h3>
+          <div class="sub">{len(am.all_points)} 个穴位 · {img_n} 张图 · {vid_n} 个 video</div>
+          <details><summary>Show table</summary><div class="body"><table>
+            <thead><tr><th>穴位</th><th>aliases</th><th>image</th><th>video</th></tr></thead>
+            <tbody>{''.join(rows)}</tbody>
+          </table></div></details>
+        </div>""")
+    except Exception as exc:  # noqa: BLE001
+        parts.append(f'<div class="card"><span class="tag red">acupoint load failed: {html.escape(str(exc))}</span></div>')
+
+    # --- KB + Recipes summary ---
+    try:
+        kb = KBIndex.load()
+        rx = RecipeExtractor()
+        by_dom: dict[str, int] = {}
+        for c in kb.all_cards():
+            by_dom[c.domain] = by_dom.get(c.domain, 0) + 1
+        dom_tags = "".join(
+            f'<span class="tag kb">{html.escape(d)}: {n}</span>'
+            for d, n in sorted(by_dom.items())
+        )
+        parts.append(f"""
+        <div class="card">
+          <h3 style="margin-top:0;">📚 Knowledge Base + Recipes
+            <span class="pill gray">data/knowledge_base/</span></h3>
+          <div class="kv">
+            <div class="k">Total cards</div><div>{len(kb)}</div>
+            <div class="k">By domain</div><div>{dom_tags}</div>
+            <div class="k">Trigger phrases (inverted index)</div><div>{len(kb.all_phrases())} unique terms</div>
+            <div class="k">Free recipes (extracted)</div><div>{rx.all_count()} ({len(rx._by_constitution)} 体质 covered)</div>
+          </div>
+        </div>""")
+    except Exception as exc:  # noqa: BLE001
+        parts.append(f'<div class="card"><span class="tag red">KB load failed: {html.escape(str(exc))}</span></div>')
+
+    # --- 9 Constitutions ---
+    cons_tags = "".join(
+        f'<span class="tag kb">{html.escape(c.value)}</span>'
+        for c in Constitution if c != Constitution.UNKNOWN
+    )
+    parts.append(f"""
+    <div class="card">
+      <h3 style="margin-top:0;">🧬 Constitutions (九體質)</h3>
+      <div class="sub">Constitution Agent 嘅评估输出空间 + Writer / Sales tone 计算用</div>
+      <div>{cons_tags}</div>
+    </div>""")
+
+    return "".join(parts)
 
 
 # -------------------------------------------------------------------
