@@ -17,6 +17,7 @@ from src.crm.models import User
 
 class SpecialistName(StrEnum):
     GREETING = "greeting"
+    CASUAL = "casual"
     FAQ = "faq"
     SALES = "sales"
     CONSTITUTION = "constitution"
@@ -43,9 +44,15 @@ class SpecialistMeta(BaseModel):
 SPECIALIST_CATALOG: dict[SpecialistName, SpecialistMeta] = {
     SpecialistName.GREETING: SpecialistMeta(
         name=SpecialistName.GREETING,
-        one_liner_zh="寒暄、閒聊、無內容嘅問候",
-        triggers_zh=("hi", "你好", "在嗎", "謝謝"),
-        output_summary="tone + topic + intent_flags (e.g. new_user_intro)",
+        one_liner_zh="只係第一次見面嘅 onboarding (官方 intro + 醫師相)",
+        triggers_zh=("hi", "你好", "首次"),
+        output_summary="official_intro + intro_bubbles + intro_media (verbatim)",
+    ),
+    SpecialistName.CASUAL: SpecialistMeta(
+        name=SpecialistName.CASUAL,
+        one_liner_zh="朋友式閒聊、關心生活、輕鬆 banter — 唔涉及醫療/產品",
+        triggers_zh=("點啊", "近排點", "做緊咩", "謝謝", "happy", "good morning"),
+        output_summary="tone + topic + lifestyle_question + soft_pivot_hint",
     ),
     SpecialistName.FAQ: SpecialistMeta(
         name=SpecialistName.FAQ,

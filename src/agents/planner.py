@@ -65,16 +65,18 @@ _SYSTEM_TEMPLATE = """你係 Jessica 嘅 Planner — 一個路由 brain。
 路由規則 (硬規矩):
 1. 有脷相 (media_urls 非空) → 必須包 constitution，mode=solo
 2. 用戶頭一次見面 (status=new + 冇對話歷史) + 簡單問候 → greeting，mode=solo
-3. 用戶問知識問題 + 同時想預約 → [faq, appointment] mode=parallel
-4. 體質剛診斷完 (status=constitution_done + 用戶仲想繼續) → [constitution, sales] mode=sequential，或者直接 sales solo
-5. 用戶 confirm 已 propose 嘅 appointment slot → appointment solo (Phase 4)
-6. 用戶問「免費 / 唔使錢 / 自己煮 / 食譜 / DIY / 點煲 / 邊度有得買材料」→
+3. 純閒聊 / 寒暄 / 朋友式問候 (status != new + 冇 medical/product/appointment
+   intent) → **casual**，唔係 greeting。Greeting 只做 first-touch。
+4. 用戶問知識問題 + 同時想預約 → [faq, appointment] mode=parallel
+5. 體質剛診斷完 (status=constitution_done + 用戶仲想繼續) → [constitution, sales] mode=sequential，或者直接 sales solo
+6. 用戶 confirm 已 propose 嘅 appointment slot → appointment solo (Phase 4)
+7. 用戶問「免費 / 唔使錢 / 自己煮 / 食譜 / DIY / 點煲 / 邊度有得買材料」→
    FAQ solo (KB 有 128 款免費 HK 中醫師家用湯水食譜)。重要：剛 pitch 完
    付費產品唔代表所有後續問題都 route 去 Sales — 用戶 reject 咗付費就要
    俾佢免費 alternatives。
-7. 用戶問「點煮 / 材料 / 做法 / 啲咩用 / 邊度買到」+ 任何湯水/食物 名 →
+8. 用戶問「點煮 / 材料 / 做法 / 啲咩用 / 邊度買到」+ 任何湯水/食物 名 →
    FAQ solo (KB 有食譜詳情)
-8. 用戶問「邊款」「點解」「乜嘢」「邊度」「幾耐」嘅知識問題（同時冇預約意向）
+9. 用戶問「邊款」「點解」「乜嘢」「邊度」「幾耐」嘅知識問題（同時冇預約意向）
    → FAQ solo
 
 Proactive hints (soft):
@@ -207,13 +209,20 @@ def _rule_overrides(
             reasoning="rule: mid constitution assessment",
         )
 
-    # Empty / extremely short greeting → greeting only
+    # Empty / extremely short greeting → greeting only (first-touch).
+    # If user has history, route to CASUAL instead.
     stripped = user_message.strip()
-    if stripped in {"hi", "hello", "你好", "Hi", "HI"} and not user.conversation_history:
+    if stripped in {"hi", "hello", "你好", "Hi", "HI"}:
+        if not user.conversation_history:
+            return PlannerDecision(
+                specialists=[SpecialistName.GREETING],
+                mode="solo",
+                reasoning="rule: first-touch greeting",
+            )
         return PlannerDecision(
-            specialists=[SpecialistName.GREETING],
+            specialists=[SpecialistName.CASUAL],
             mode="solo",
-            reasoning="rule: first-touch greeting",
+            reasoning="rule: repeat 'hi' / returning user — casual not onboarding",
         )
 
     # User explicitly wants free / DIY content → KB lookup, NOT Sales.

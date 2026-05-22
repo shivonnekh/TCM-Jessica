@@ -10,6 +10,7 @@ from typing import Any, Protocol
 
 from src.agents.appointment_agent import AppointmentAgent
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
+from src.agents.casual_agent import CasualAgent
 from src.agents.constitution_agent import ConstitutionAgent
 from src.agents.faq_agent import FAQAgent
 from src.agents.greeting_agent import GreetingAgent
@@ -31,6 +32,7 @@ def build_specialist_registry(
 ) -> dict[SpecialistName, SpecialistProtocol]:
     return {
         SpecialistName.GREETING: GreetingAgent(client),
+        SpecialistName.CASUAL: CasualAgent(client),
         SpecialistName.FAQ: FAQAgent(client=client, kb_search=kb_search),
         SpecialistName.SALES: SalesAgent(client=client),
         SpecialistName.CONSTITUTION: ConstitutionAgent(

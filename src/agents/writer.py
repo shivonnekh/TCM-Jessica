@@ -47,7 +47,8 @@ SPECIALIST_PRIORITY: list[SpecialistName] = [
     SpecialistName.APPOINTMENT,   # active booking — concrete action
     SpecialistName.SALES,         # pitch — drives revenue
     SpecialistName.FAQ,           # educational — informational
-    SpecialistName.GREETING,      # filler — never override above
+    SpecialistName.CASUAL,        # rapport, listens — below substantive
+    SpecialistName.GREETING,      # first-touch only — lowest
 ]
 
 
@@ -103,6 +104,16 @@ Conflict resolution (當 2 個 specialist 講唔同嘢):
 
 低優先級嘅 specialist 內容 → 變副線 / 略提 / drop。
 例如: faq 返 no_match + sales 有產品 → focus sales，faq 略提。
+
+══════════════════════════════
+Casual Talk specialist payload (今 turn 有 casual specialist 嘅話):
+- payload.tone (warm/playful/concerned/supportive) → 揀 emoji + 語氣
+- payload.topic → ack 用戶 share 緊乜
+- payload.lifestyle_question (非 null 時) → 直接做今 turn follow-up，唔好作多
+- payload.soft_pivot_hint → 用戶 implicit 提到健康。今 turn 唔講醫療，
+  輕輕 mention 一句「有需要我可以幫你睇下」就夠
+- intent_flags 包 empathy_needed → 第一個 bubble 必係 emotional ack
+  (例「明白嘅...」「咁辛苦你...」)，唔好跳到問題
 
 ══════════════════════════════
 朋友式跟進 (CARING FOLLOW-UP — 必做):

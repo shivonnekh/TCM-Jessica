@@ -27,8 +27,9 @@ def test_substantive_message_falls_through_to_llm() -> None:
     assert decision is None  # signal: LLM should decide
 
 
-def test_returning_user_says_hi_falls_through() -> None:
-    """A user with history saying 'hi' is NOT a first-touch — go to LLM."""
+def test_returning_user_says_hi_routes_to_casual() -> None:
+    """A user with history saying 'hi' is NOT a first-touch — should
+    route to CasualTalk Agent (not Greeting onboarding)."""
     from datetime import datetime
 
     from src.crm.models import ConversationMessage
@@ -41,4 +42,6 @@ def test_returning_user_says_hi_falls_through() -> None:
         ],
     )
     decision = _rule_overrides(user, "hi", [])
-    assert decision is None
+    assert decision is not None
+    assert decision.specialists == [SpecialistName.CASUAL]
+    assert decision.mode == "solo"
