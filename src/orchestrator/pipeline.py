@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -380,21 +381,27 @@ def _apply_specialist_diffs(user: User, outputs: list[SpecialistOutput]) -> User
 
 def _collect_payload_urls(outputs: list[SpecialistOutput]) -> list[str]:
     """Walk every specialist payload + tools_called result, pull out
-    every absolute URL we trust to actually exist on our server or a
-    well-known image host."""
+    every absolute URL we trust. Returns in DISCOVERY ORDER (preserving
+    the order specialists put them in, so e.g. products_to_pitch[0]'s
+    image comes first)."""
     urls: list[str] = []
+    seen: set[str] = set()
 
     def visit(node: Any) -> None:
         if isinstance(node, str):
-            if node.startswith(("http://", "https://")) and (
-                "tcm-jessica.onrender.com" in node
-                or "localhost" in node
-                or "127.0.0.1" in node
-                # external images from KB cards (healthy-food.hk etc.)
-                or "healthy-food.hk" in node
-                or "careplustcm.com" in node
+            if (
+                node.startswith(("http://", "https://"))
+                and node not in seen
+                and (
+                    "tcm-jessica.onrender.com" in node
+                    or "localhost" in node
+                    or "127.0.0.1" in node
+                    or "healthy-food.hk" in node
+                    or "careplustcm.com" in node
+                )
             ):
                 urls.append(node)
+                seen.add(node)
         elif isinstance(node, dict):
             for v in node.values():
                 visit(v)
@@ -408,31 +415,74 @@ def _collect_payload_urls(outputs: list[SpecialistOutput]) -> list[str]:
     return urls
 
 
+# Markdown image / link patterns the Writer keeps leaking into bubbles.
+_MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)]+)\)")
+_BARE_URL_RE = re.compile(r"https?://\S+")
+
+
+def _strip_inline_media(text: str) -> str:
+    """Remove Markdown image syntax `![](url)` and inline links/URLs from a bubble.
+
+    Images and links should go through media_to_send. WhatsApp doesn't
+    render Markdown, so leaving these in the bubble shows ugly raw
+    text and a duplicated URL.
+    """
+    # ![alt](url) → drop entirely
+    text = _MD_IMAGE_RE.sub("", text)
+    # [label](url) → keep just the label
+    text = _MD_LINK_RE.sub(r"\1", text)
+    # bare URLs to our own media → drop (they should be in media_to_send)
+    text = re.sub(
+        r"https?://(?:tcm-jessica\.onrender\.com|localhost|127\.0\.0\.1)\S+",
+        "",
+        text,
+    )
+    # cleanup whitespace
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _filter_media_to_payload_only(
     writer_output: WriterOutput, outputs: list[SpecialistOutput]
 ) -> WriterOutput:
-    """Drop any media_to_send URL that did not appear in any specialist
-    payload. Writer LLM hallucinates URLs occasionally — this is the
-    last line of defence so the user never sees 'example.com/...'."""
-    trusted = set(_collect_payload_urls(outputs))
+    """Whitelist outbound media URLs + strip leaked Markdown from bubbles."""
+    trusted_ordered = _collect_payload_urls(outputs)
+    trusted_set = set(trusted_ordered)
+
     cleaned: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
     for m in (writer_output.media_to_send or []):
         url = m.get("url", "")
-        if url in trusted:
+        if not url:
+            continue
+        if url in seen_urls:
+            continue
+        if url in trusted_set:
             cleaned.append(m)
+            seen_urls.add(url)
         else:
             logger.warning("[media] dropping non-payload URL: %r", url[:120])
 
-    # If Writer produced nothing valid but specialists did surface
-    # product images, auto-inject them so the user sees the products
-    # they were just told about.
-    if not cleaned and trusted:
-        # Limit to first 3 images to avoid flooding.
-        for i, url in enumerate(list(trusted)[:3]):
-            cleaned.append({"url": url, "after_bubble_idx": i})
+    # Fallback: Writer didn't emit any valid media but specialists had
+    # images. Inject in ORDERED DISCOVERY ORDER (products_to_pitch[0]
+    # first, etc.) and align each with a bubble index.
+    if not cleaned and trusted_ordered:
+        for i, url in enumerate(trusted_ordered[:3]):
+            # Pin every image to bubble 0 if there's <= 1 bubble, else
+            # spread evenly so they land between text bubbles.
+            n_bubbles = max(1, len(writer_output.bubbles))
+            idx = min(i, n_bubbles - 1)
+            cleaned.append({"url": url, "after_bubble_idx": idx})
+        logger.info("[media] auto-injected %d images from payload", len(cleaned))
+
+    stripped_bubbles = [_strip_inline_media(b) for b in writer_output.bubbles]
+    # Drop bubbles that are now empty (the Markdown was the only content).
+    stripped_bubbles = [b for b in stripped_bubbles if b]
+    if not stripped_bubbles:
+        stripped_bubbles = list(writer_output.bubbles)  # safety
 
     return WriterOutput(
-        bubbles=list(writer_output.bubbles),
+        bubbles=stripped_bubbles,
         media_to_send=cleaned,
     )
 
