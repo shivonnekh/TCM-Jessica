@@ -31,6 +31,7 @@ from src.llm import LLMClient
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
 from src.crm.models import Constitution
 from src.tools.acupoint_images import AcupointImageMap
+from src.tools import prompt_overrides
 from src.tools.kb_index import KBIndex
 from src.tools.kb_search import KBSearch, SearchHit
 from src.tools.recipe_extractor import RecipeExtractor, recipe_to_dict
@@ -191,7 +192,7 @@ class FAQAgent:
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=self._max_tokens,
-            system=_SYSTEM,
+            system=prompt_overrides.resolve("faq_system", _SYSTEM),
             messages=[{"role": "user", "content": prompt}],
         )
 

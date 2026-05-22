@@ -42,6 +42,7 @@ from src.agents.base import (
     SpecialistOutput,
 )
 from src.crm.models import Constitution, UserStatus
+from src.tools import prompt_overrides
 from src.tools.kb_index import KBIndex
 from src.tools.kb_search import KBSearch
 from src.tools.product_catalog import ProductCatalog
@@ -334,7 +335,7 @@ class ConstitutionAgent:
             response = await self._client.messages.create(
                 model=self._vision_model,
                 max_tokens=self._max_vision_tokens,
-                system=_VISION_SYSTEM,
+                system=prompt_overrides.resolve("constitution_vision_system", _VISION_SYSTEM),
                 messages=[{"role": "user", "content": [content_block]}],
             )
         except Exception as exc:  # noqa: BLE001

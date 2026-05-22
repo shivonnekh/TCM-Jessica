@@ -46,6 +46,7 @@ from src.llm import LLMClient
 
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
 from src.crm.models import Promotion
+from src.tools import prompt_overrides
 from src.tools.pitch_playbook import PitchPlaybook
 from src.tools.product_catalog import ProductCatalog, ProductMatch
 from src.tools.promotions import PromotionsLoader
@@ -209,7 +210,7 @@ class SalesAgent:
             response = await self._client.messages.create(
                 model=self._model,
                 max_tokens=self._max_tokens,
-                system=_SYSTEM,
+                system=prompt_overrides.resolve("sales_system", _SYSTEM),
                 messages=[{"role": "user", "content": prompt}],
             )
             raw = "".join(

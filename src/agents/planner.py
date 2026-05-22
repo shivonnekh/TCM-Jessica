@@ -37,6 +37,7 @@ from src.agents.base import (
     render_specialist_menu_zh,
 )
 from src.crm.models import Constitution, User, UserStatus
+from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.planner")
 
@@ -111,7 +112,11 @@ class PlannerAgent:
         self._client = client
         self._model = model
         self._max_tokens = max_tokens
-        self._system = _build_system_prompt()
+
+    @property
+    def _system(self) -> str:
+        """Resolve live override every call so /admin edits take effect immediately."""
+        return prompt_overrides.resolve("planner_system", _build_system_prompt())
 
     async def decide(
         self,

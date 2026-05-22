@@ -30,6 +30,7 @@ from src.agents.base import (
     WriterOutput,
 )
 from src.crm.models import User, UserStatus
+from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.writer")
 
@@ -245,7 +246,10 @@ class WriterAgent:
         self._client = client
         self._model = model
         self._max_tokens = max_tokens
-        self._system = _build_system_prompt()
+
+    @property
+    def _system(self) -> str:
+        return prompt_overrides.resolve("writer_system", _build_system_prompt())
 
     async def compose(
         self,

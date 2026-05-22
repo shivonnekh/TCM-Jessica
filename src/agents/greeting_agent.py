@@ -37,6 +37,7 @@ from src.agents.base import (
     SpecialistOutput,
 )
 from src.crm.models import UserStatus
+from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.greeting")
 
@@ -193,7 +194,7 @@ class GreetingAgent:
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=self._max_tokens,
-            system=_SYSTEM,
+            system=prompt_overrides.resolve("greeting_system", _SYSTEM),
             messages=[{"role": "user", "content": prompt}],
         )
 

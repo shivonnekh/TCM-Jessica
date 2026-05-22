@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 HKT = timezone(timedelta(hours=8))
 
@@ -47,6 +47,7 @@ from src.agents import (
 )
 from src.agents.base import SPECIALIST_CATALOG, render_specialist_menu_zh
 from src.crm.models import Constitution
+from src.tools import prompt_overrides
 from src.tools.acupoint_images import AcupointImageMap
 from src.tools.kb_index import KBIndex
 from src.tools.pitch_playbook import PitchPlaybook
@@ -165,6 +166,7 @@ _AGENT_META: list[dict[str, Any]] = [
     {
         "name": "Greeting Agent",
         "key": "greeting",
+        "override_key": "greeting_system",
         "module": greeting_agent,
         "model_attr": "DEFAULT_MODEL",
         "file": "src/agents/greeting_agent.py",
@@ -177,6 +179,7 @@ _AGENT_META: list[dict[str, Any]] = [
     {
         "name": "FAQ Agent",
         "key": "faq",
+        "override_key": "faq_system",
         "module": faq_agent,
         "model_attr": "DEFAULT_MODEL",
         "file": "src/agents/faq_agent.py",
@@ -193,6 +196,7 @@ _AGENT_META: list[dict[str, Any]] = [
     {
         "name": "Sales Agent",
         "key": "sales",
+        "override_key": "sales_system",
         "module": sales_agent,
         "model_attr": "DEFAULT_MODEL",
         "file": "src/agents/sales_agent.py",
@@ -209,6 +213,7 @@ _AGENT_META: list[dict[str, Any]] = [
     {
         "name": "Constitution Agent",
         "key": "constitution",
+        "override_key": "constitution_vision_system",
         "module": constitution_agent,
         "model_attr": "DEFAULT_MODEL",
         "file": "src/agents/constitution_agent.py",
@@ -242,6 +247,7 @@ _AGENT_META: list[dict[str, Any]] = [
     {
         "name": "Writer",
         "key": "writer",
+        "override_key": "writer_system",
         "module": writer,
         "model_attr": "DEFAULT_MODEL",
         "file": "src/agents/writer.py",
@@ -283,15 +289,45 @@ def _resolve_model(meta: dict[str, Any]) -> str:
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_index() -> HTMLResponse:
     cards = []
+    overrides = prompt_overrides.get_all()
     for meta in _AGENT_META:
         model = _resolve_model(meta)
-        prompt = _resolve_prompt(meta)
+        baked_prompt = _resolve_prompt(meta)
+        ov_key = meta.get("override_key", "")
+        live_override = overrides.get(ov_key, "") if ov_key else ""
+        live_prompt = live_override if live_override else baked_prompt
+        is_overridden = bool(live_override and live_override.strip())
+
         tools_html = "".join(
             f'<span class="tag tool">{html.escape(t)}</span>' for t in meta["tools"]
         ) or '<span class="tag muted">(无)</span>'
         kb_html = "".join(
             f'<span class="tag kb">{html.escape(k)}</span>' for k in meta["kb"]
         ) or '<span class="tag muted">(none)</span>'
+
+        # Edit form — only if override_key exists for this agent
+        edit_html = ""
+        if ov_key:
+            status_pill = (
+                '<span class="pill" style="background:#ffe0b2;color:#7c2d12;">● overridden (live)</span>'
+                if is_overridden
+                else '<span class="pill gray">baked-in</span>'
+            )
+            edit_html = f"""
+            <details>
+              <summary>📝 Live System Prompt {status_pill}</summary>
+              <div class="body">
+                <form onsubmit="return savePrompt(event, '{ov_key}')">
+                  <textarea name="value" rows="22" style="width:100%;font-family:ui-monospace,monospace;font-size:0.82rem;padding:0.6rem;border:1px solid var(--line);border-radius:6px;">{html.escape(live_prompt)}</textarea>
+                  <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center;">
+                    <button type="submit" style="background:var(--accent);color:white;border:0;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;">💾 Save (live)</button>
+                    <button type="button" onclick="resetPrompt('{ov_key}')" style="background:#e5e7eb;border:0;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;">↺ Revert to baked-in</button>
+                    <span class="sub" id="status-{ov_key}" style="margin:0;"></span>
+                  </div>
+                </form>
+              </div>
+            </details>
+            """
 
         cards.append(f"""
         <div class="card">
@@ -305,10 +341,7 @@ async def admin_index() -> HTMLResponse:
             <div class="k">Tools</div><div>{tools_html}</div>
             <div class="k">Knowledge / data</div><div>{kb_html}</div>
           </div>
-          <details>
-            <summary>System Prompt</summary>
-            <div class="body"><pre>{html.escape(prompt)}</pre></div>
-          </details>
+          {edit_html}
         </div>
         """)
 
@@ -316,7 +349,49 @@ async def admin_index() -> HTMLResponse:
 
     body = f"""
     <h1>Agent Config Inspector</h1>
-    <div class="sub">7 个 agent + 跑落 data。Read-only。修改: 编辑 file → push → Render 自动 redeploy</div>
+    <div class="sub">7 个 agent + 跑落 data。Agent prompts <strong>live-editable</strong> — save 之后即刻喺下一 turn 生效，唔使 redeploy。Data + playbook 改 JSON 直接 push。</div>
+
+    <script>
+    async function savePrompt(event, key) {{
+      event.preventDefault();
+      const form = event.target;
+      const value = form.value.value;
+      const status = document.getElementById('status-' + key);
+      status.textContent = '⏳ saving…'; status.style.color = '';
+      try {{
+        const r = await fetch('/admin/api/prompts/' + key, {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ value }}),
+        }});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        status.textContent = '✓ saved (' + d.length + ' chars) — next turn uses this';
+        status.style.color = 'var(--accent)';
+      }} catch (e) {{
+        status.textContent = '✗ ' + e.message;
+        status.style.color = 'var(--warn)';
+      }}
+      return false;
+    }}
+    async function resetPrompt(key) {{
+      if (!confirm('Revert to baked-in prompt? This deletes the override.')) return;
+      const status = document.getElementById('status-' + key);
+      status.textContent = '⏳ reverting…';
+      try {{
+        const r = await fetch('/admin/api/prompts/' + key, {{
+          method: 'DELETE',
+        }});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        status.textContent = '✓ reverted — reloading…';
+        status.style.color = 'var(--accent)';
+        setTimeout(() => location.reload(), 600);
+      }} catch (e) {{
+        status.textContent = '✗ ' + e.message;
+        status.style.color = 'var(--warn)';
+      }}
+    }}
+    </script>
 
     <div class="card">
       <h3 style="margin-top:0;">Specialist Routing Menu (Planner 见到嘅)</h3>
@@ -513,6 +588,25 @@ def _get_trace_writer(request: Request) -> TraceWriter:
 
 def _trace_root(request: Request) -> Path:
     return Path(_get_trace_writer(request)._root)  # noqa: SLF001
+
+
+@router.post("/admin/api/prompts/{key}")
+async def save_prompt(key: str, request: Request) -> JSONResponse:
+    """Save a live prompt override. Empty value deletes."""
+    body = await request.json()
+    value = (body.get("value") or "").strip()
+    if not value:
+        prompt_overrides.set_override(key, "")
+        return JSONResponse({"key": key, "length": 0, "cleared": True})
+    prompt_overrides.set_override(key, value)
+    return JSONResponse({"key": key, "length": len(value), "cleared": False})
+
+
+@router.delete("/admin/api/prompts/{key}")
+async def delete_prompt(key: str) -> JSONResponse:
+    """Clear a prompt override → fall back to baked-in."""
+    prompt_overrides.set_override(key, "")
+    return JSONResponse({"key": key, "cleared": True})
 
 
 @router.get("/admin/traces", response_class=HTMLResponse)
