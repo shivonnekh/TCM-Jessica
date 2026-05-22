@@ -438,65 +438,88 @@ class SalesAgent:
         )
 
     def _soups_output(self, user: Any) -> SpecialistOutput:
-        """Surface paid soup catalog when user shows repeat interest.
-
-        Picks top 5 soups matching user constitution / pain_points if
-        we know them; otherwise lists the full 10 in price-ascending
-        order so the user sees the spread.
-        """
-        soups = [
+        """Surface 3 paid soup recommendations targeted by constitution
+        + pain points. 唔系倒晒 10 款，係**揀** 3 款最啱。"""
+        all_soups = [
             p for p in self._catalog.all_products if p.product_type == "soup"
         ]
-        # Try to personalise; fall back to broad
+        # Personalise via ProductCatalog scoring (handles contraindications
+        # for pregnancy etc.). max_results=4 in case top-3 has a tie.
         candidates = self._catalog.match_products(
             constitution=user.constitution.value if user.constitution else None,
             pain_points=list(user.pain_points),
-            already_pitched=[],
+            already_pitched=list(user.products_pitched or []),
             user_tags=list(user.tags),
             user_notes=user.notes,
-            max_results=10,
+            max_results=4,
             min_score=0.0,
         )
         if candidates:
-            ordered = [pm.product for pm in candidates if pm.product.product_type == "soup"]
-            seen = {p.product_id for p in ordered}
-            for s in sorted(soups, key=lambda p: p.price_hkd or 999):
-                if s.product_id not in seen:
-                    ordered.append(s)
+            soups = [
+                pm.product for pm in candidates
+                if pm.product.product_type == "soup"
+            ][:3]
+            # Top up to 3 with broad fallback if scoring under-picked
+            if len(soups) < 3:
+                seen = {p.product_id for p in soups}
+                for s in sorted(all_soups, key=lambda p: p.price_hkd or 999):
+                    if s.product_id in seen:
+                        continue
+                    if s.product_id in (user.products_pitched or []):
+                        continue
+                    soups.append(s)
                     seen.add(s.product_id)
-            soups = ordered
+                    if len(soups) >= 3:
+                        break
         else:
-            soups = sorted(soups, key=lambda p: p.price_hkd or 999)
-        # User explicitly asked for the full list — show all 10. Their
-        # intent is at peak; cutting short forces another round of
-        # friction. Writer can group / pace bubbles however it wants.
+            # No constitution / pain points — show 3 popular/middle-priced
+            soups = sorted(
+                all_soups, key=lambda p: p.price_hkd or 999
+            )[:3]
 
         products = [_product_dict_simple(p) for p in soups]
         offers = _collect_offers(
-            self._promotions, ["soup_pitch", "sales_pitch", "sales_close"]
+            self._promotions, ["soup_pitch", "sales_pitch", "consultation_backstop"]
         )
+        constitution_str = (
+            user.constitution.value if user.constitution else "未評估"
+        )
+        playbook = self._playbook
         payload = {
             "intent": "pitch_products",
             "products_to_pitch": products,
             "active_offers": offers,
             "stage": "soup_pitch",
+            "user_constitution": constitution_str,
+            "playbook_safety": playbook.safety_disclaimer if playbook else "",
+            "playbook_backstop": playbook.consultation_backstop if playbook else "",
             "catalog_facts": {
-                "total_paid_soups": 10,
+                "total_paid_soups": len(all_soups),
                 "shown_now": len(products),
                 "made_by": "Care Plus 心宜中醫",
+                "selection_basis": (
+                    f"按用戶 constitution={constitution_str} + "
+                    f"pain_points={list(user.pain_points) or '無'} 揀"
+                ),
             },
             "writer_hint": (
-                "用戶又問湯水 — 之前已經睇過免費食譜，依家係時候 pitch 付費。"
-                f"**必須**列晒全部 {len(products)} 款 (名 + 價錢 + 1 句功效)，"
-                "每款 1 bubble + 圖。"
-                "Writer 嘅 bubble cap (5 個) 唔適用 — 列產品 list 嗰陣"
-                "係 catalog browsing scenario，可以每個 bubble 包 2-3 款，"
-                "或者全部開晒。最尾一個 bubble 問:「想要邊款？同我講你嘅選擇 + "
-                "收件地址，我幫你跟進。」絕對唔好提任何 WhatsApp 號碼。"
+                f"用戶想要湯水推介。依家揀咗 {len(products)} 款最啱嘅 "
+                f"(依據: 體質 {constitution_str}、需求 "
+                f"{list(user.pain_points) or '一般調理'})。\n"
+                "Bubble 1 (open): 1 句講「按你嘅情況，我幫你揀咗呢 3 款」。\n"
+                f"Bubble 2-{len(products)+1} (每款 1 bubble): 名 + 價錢 + "
+                "「方向：xxx」(用軟性語，唔好斷言「治療」)。每款附返圖。\n"
+                f"Bubble {len(products)+2} (backstop): 「"
+                + (playbook.consultation_backstop if playbook else "")
+                + "」\n"
+                f"Bubble {len(products)+3} (CTA): 問「想試邊款？同我講你嘅"
+                "選擇 + 收件地址，我幫你跟進。」\n"
+                "唔好提 WhatsApp 號碼，唔好倒晒 10 款 — focus 呢 3 款。"
             ),
             "writer_must_not_say": [
                 "WhatsApp 我哋", "+852 5241 7448", "wa.me",
                 "市售產品", "唔係我哋自己做",
+                "你應該買", "保證療效", "包好",
             ],
         }
         return SpecialistOutput(
@@ -601,7 +624,7 @@ class SalesAgent:
                 already_pitched=[],   # ignore one-pitch rule for explicit ask
                 user_tags=list(user.tags),
                 user_notes=user.notes,
-                max_results=4,
+                max_results=3,
                 min_score=0.0,        # accept anything
             )
             if not candidates:
