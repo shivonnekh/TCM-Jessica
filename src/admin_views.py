@@ -1,0 +1,540 @@
+"""Admin HTML views — agent config inspector + per-turn trace viewer.
+
+Exposed at:
+  GET /admin                   → list every agent (prompt / model / tools)
+  GET /admin/traces            → recent turn list
+  GET /admin/traces/{turn_id}  → per-turn drill-down
+
+Pure read-only. No mutations from this surface.
+"""
+
+from __future__ import annotations
+
+import html
+import json
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse
+
+from src.agents import (
+    appointment_agent,
+    constitution_agent,
+    faq_agent,
+    greeting_agent,
+    planner,
+    sales_agent,
+    writer,
+)
+from src.agents.base import SPECIALIST_CATALOG, render_specialist_menu_zh
+from src.trace.writer import TraceWriter
+
+router = APIRouter(tags=["admin"])
+
+
+# -------------------------------------------------------------------
+# Shared styling
+# -------------------------------------------------------------------
+
+
+_BASE_CSS = """
+:root {
+  --bg: #fafaf7; --card: #fff; --ink: #1a1a1a; --muted: #6b6b6b;
+  --line: #e3e3df; --accent: #2d6a4f; --accent-soft: #d8f3dc;
+  --warn: #c44d3a; --code-bg: #f4f1ed;
+  --planner: #d8f3dc; --writer: #fce4dc;
+  --tool: #e3f2fd; --kb: #f3e5f5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--ink); line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang HK", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1.2rem 4rem; }
+nav { background: var(--accent); color: white; padding: 0.75rem 1.2rem; display:flex; gap:1.2rem; align-items:center; }
+nav a { color: rgba(255,255,255,0.85); text-decoration: none; font-size: 0.95rem; }
+nav a:hover, nav a.active { color: white; font-weight: 600; }
+nav .spacer { flex: 1; }
+nav .label { font-size: 0.85rem; opacity: 0.7; }
+h1 { font-size: 1.5rem; margin: 0 0 0.4rem; }
+h2 { font-size: 1.15rem; margin: 1.8rem 0 0.8rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--line); }
+h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; color: var(--accent); }
+.sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.15rem; margin: 0.6rem 0; }
+pre { background: var(--code-bg); padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+code { background: var(--code-bg); padding: 0.05rem 0.35rem; border-radius: 3px; font-size: 0.85em; }
+details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin: 0.5rem 0; }
+details > summary { padding: 0.6rem 0.9rem; cursor: pointer; user-select: none; font-weight: 500; font-size: 0.95rem; }
+details[open] > summary { border-bottom: 1px solid var(--line); }
+details > .body { padding: 0.5rem 1rem 1rem; }
+.tag { display:inline-block; padding:0.1rem 0.5rem; border-radius:4px; font-size:0.75rem; margin-right:0.3rem; }
+.tag.tool { background: var(--tool); color:#1e40af; }
+.tag.kb { background: var(--kb); color:#6b21a8; }
+.tag.muted { background: var(--code-bg); color: var(--muted); }
+.tag.green { background: var(--accent-soft); color: var(--accent); }
+.tag.red { background: #fce4dc; color: var(--warn); }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin: 0.5rem 0; }
+th, td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { background: var(--code-bg); font-weight: 600; }
+.kv { display: grid; grid-template-columns: 180px 1fr; gap: 0.3rem 0.8rem; font-size: 0.88rem; }
+.kv .k { color: var(--muted); }
+.bubble { background: var(--accent-soft); padding: 0.5rem 0.8rem; border-radius: 10px; margin: 0.25rem 0; max-width: 90%; display: inline-block; font-size: 0.9rem; }
+.bubble.user { background: #cfe9ff; }
+.section { margin: 1.2rem 0; }
+.section .head { font-weight: 600; margin-bottom: 0.4rem; }
+.pill { display:inline-block; background: var(--planner); color: var(--accent); padding:0.15rem 0.55rem; border-radius:999px; font-size:0.72rem; margin-left:0.3rem; }
+.pill.writer { background: var(--writer); color: var(--warn); }
+.pill.gray { background: var(--code-bg); color: var(--muted); }
+.scroll { max-height: 480px; overflow-y: auto; }
+"""
+
+
+def _nav(active: str) -> str:
+    """Top nav bar. `active` is the current page key."""
+
+    def link(href: str, label: str, key: str) -> str:
+        cls = "active" if active == key else ""
+        return f'<a href="{href}" class="{cls}">{label}</a>'
+
+    return f"""<nav>
+  <span class="label">Jessica Admin</span>
+  {link("/dev/", "💬 Chat", "chat")}
+  {link("/admin", "⚙️ Agents", "agents")}
+  {link("/admin/traces", "📊 Traces", "traces")}
+  <span class="spacer"></span>
+  <span class="label">{html.escape(active.title())}</span>
+</nav>"""
+
+
+def _wrap_page(title: str, active: str, body: str) -> str:
+    return f"""<!doctype html>
+<html lang="zh-HK"><head><meta charset="utf-8">
+<title>{html.escape(title)}</title>
+<style>{_BASE_CSS}</style>
+</head><body>{_nav(active)}<div class="wrap">{body}</div></body></html>"""
+
+
+# -------------------------------------------------------------------
+# /admin — agent config inspector
+# -------------------------------------------------------------------
+
+
+# Source-of-truth for what each agent uses. Lives here so we don't have
+# to import + scan every tool; cheaper to maintain manually.
+_AGENT_META: list[dict[str, Any]] = [
+    {
+        "name": "Planner",
+        "key": "planner",
+        "module": planner,
+        "model_attr": "DEFAULT_MODEL",
+        "file": "src/agents/planner.py",
+        "purpose": "决定 1-2 个 specialist 处理本回合，rule fast-path + LLM fallback",
+        "tools": ["rule fast-paths (no external)"],
+        "kb": [],
+        "prompt_renderer": "planner._build_system_prompt",
+        "max_tokens_attr": None,
+    },
+    {
+        "name": "Greeting Agent",
+        "key": "greeting",
+        "module": greeting_agent,
+        "model_attr": "DEFAULT_MODEL",
+        "file": "src/agents/greeting_agent.py",
+        "purpose": "First-touch 官方 intro (verbatim from data/greetings.json) + casual chat fallback",
+        "tools": ["data/greetings.json (官方 intro 模板)"],
+        "kb": [],
+        "prompt_attr": "_SYSTEM",
+        "max_tokens_attr": None,
+    },
+    {
+        "name": "FAQ Agent",
+        "key": "faq",
+        "module": faq_agent,
+        "model_attr": "DEFAULT_MODEL",
+        "file": "src/agents/faq_agent.py",
+        "purpose": "TCM 知识问答 / 食谱清单。KB 检索 + LLM 抽 facts",
+        "tools": ["KBSearch (52 cards)", "RecipeExtractor (128 free recipes)"],
+        "kb": ["data/knowledge_base/* (52 cards)"],
+        "prompt_attr": "_SYSTEM",
+        "max_tokens_attr": None,
+    },
+    {
+        "name": "Sales Agent",
+        "key": "sales",
+        "module": sales_agent,
+        "model_attr": "DEFAULT_MODEL",
+        "file": "src/agents/sales_agent.py",
+        "purpose": "Pitch 付费产品 (10 汤水 + 3 药膏)，handle '邊度買' / 药膏 / 推荐",
+        "tools": ["ProductCatalog (13 paid products)", "PromotionsLoader (3 offers)"],
+        "kb": ["data/products/* (paid catalog)"],
+        "prompt_attr": "_SYSTEM",
+        "max_tokens_attr": None,
+    },
+    {
+        "name": "Constitution Agent",
+        "key": "constitution",
+        "module": constitution_agent,
+        "model_attr": "DEFAULT_MODEL",
+        "file": "src/agents/constitution_agent.py",
+        "purpose": "九体质评估，4-phase (ask_tongue → vision → 4 MCQs → declare with probabilities)",
+        "tools": ["Claude Vision (脷相)", "RecipeExtractor", "ProductCatalog", "KBSearch", "PromotionsLoader"],
+        "kb": [
+            "data/knowledge_base/constitution/* (4 cards)",
+            "data/knowledge_base/soups/tcm_food_therapy_soups*.json (128 recipes)",
+        ],
+        "prompt_attr": "_VISION_SYSTEM",
+        "max_tokens_attr": None,
+    },
+    {
+        "name": "Appointment Agent",
+        "key": "appointment",
+        "module": appointment_agent,
+        "model_attr": None,
+        "file": "src/agents/appointment_agent.py",
+        "purpose": "预约 4-phase (mode → district → slot → confirm)。Rule-based，无 LLM",
+        "tools": ["ClinicMatcher (district adjacency)", "PromotionsLoader"],
+        "kb": ["data/clinics/clinics.json"],
+        "prompt_attr": None,
+        "max_tokens_attr": None,
+    },
+    {
+        "name": "Writer",
+        "key": "writer",
+        "module": writer,
+        "model_attr": "DEFAULT_MODEL",
+        "file": "src/agents/writer.py",
+        "purpose": "Single voice — 组合所有 specialist output → 1-5 个 WhatsApp bubble + media_to_send",
+        "tools": ["(none — reads payload only)"],
+        "kb": [],
+        "prompt_renderer": "writer._build_system_prompt",
+        "max_tokens_attr": None,
+    },
+]
+
+
+def _resolve_prompt(meta: dict[str, Any]) -> str:
+    mod = meta["module"]
+    renderer = meta.get("prompt_renderer")
+    if renderer:
+        # form like "writer._build_system_prompt"
+        fn_name = renderer.split(".")[-1]
+        fn = getattr(mod, fn_name, None)
+        if callable(fn):
+            try:
+                return fn()
+            except Exception as exc:  # noqa: BLE001
+                return f"(render failed: {exc})"
+    attr = meta.get("prompt_attr")
+    if attr:
+        return str(getattr(mod, attr, "(prompt attr missing)"))
+    return "(no prompt — rule-based agent)"
+
+
+def _resolve_model(meta: dict[str, Any]) -> str:
+    mod = meta["module"]
+    attr = meta.get("model_attr")
+    if not attr:
+        return "n/a (rule-based)"
+    return str(getattr(mod, attr, "?"))
+
+
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_index() -> HTMLResponse:
+    cards = []
+    for meta in _AGENT_META:
+        model = _resolve_model(meta)
+        prompt = _resolve_prompt(meta)
+        tools_html = "".join(
+            f'<span class="tag tool">{html.escape(t)}</span>' for t in meta["tools"]
+        ) or '<span class="tag muted">(无)</span>'
+        kb_html = "".join(
+            f'<span class="tag kb">{html.escape(k)}</span>' for k in meta["kb"]
+        ) or '<span class="tag muted">(none)</span>'
+
+        cards.append(f"""
+        <div class="card">
+          <div style="display:flex;align-items:baseline;gap:0.6rem;">
+            <h2 style="margin:0;border:0;padding:0;">{html.escape(meta["name"])}</h2>
+            <span class="pill gray">{html.escape(model)}</span>
+          </div>
+          <div class="sub">{html.escape(meta["purpose"])}</div>
+          <div class="kv">
+            <div class="k">File</div><div><code>{html.escape(meta["file"])}</code></div>
+            <div class="k">Tools</div><div>{tools_html}</div>
+            <div class="k">Knowledge / data</div><div>{kb_html}</div>
+          </div>
+          <details>
+            <summary>System Prompt</summary>
+            <div class="body"><pre>{html.escape(prompt)}</pre></div>
+          </details>
+        </div>
+        """)
+
+    body = f"""
+    <h1>Agent Config Inspector</h1>
+    <div class="sub">7 个 agent 嘅 prompt / model / 工具 / KB。Read-only。</div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Specialist Routing Menu (Planner 见到嘅)</h3>
+      <pre>{html.escape(render_specialist_menu_zh())}</pre>
+    </div>
+
+    {''.join(cards)}
+    """
+    return HTMLResponse(_wrap_page("Agent Config", "agents", body))
+
+
+# -------------------------------------------------------------------
+# /admin/traces — list + drill-down
+# -------------------------------------------------------------------
+
+
+def _get_trace_writer(request: Request) -> TraceWriter:
+    return request.app.state.trace_writer
+
+
+def _trace_root(request: Request) -> Path:
+    return Path(_get_trace_writer(request)._root)  # noqa: SLF001
+
+
+@router.get("/admin/traces", response_class=HTMLResponse)
+async def traces_list(request: Request, phone: str | None = None) -> HTMLResponse:
+    tw = _get_trace_writer(request)
+    paths = tw.list_recent(phone=phone, limit=50)
+
+    rows = []
+    root = _trace_root(request)
+    for p in paths:
+        turn_id = p.stem
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        ts = (data.get("received_at") or "")[:19].replace("T", " ")
+        phone_v = data.get("phone", "?")
+        user_msg = (data.get("user_message") or "")[:60]
+        specs = ", ".join(
+            s.get("name", "?") for s in (data.get("specialists") or [])
+        ) or "—"
+        n_bubbles = len(((data.get("writer") or {}).get("output") or {}).get("bubbles") or [])
+        latency = data.get("total_latency_ms", "?")
+        rel = p.relative_to(root)
+        rows.append(f"""<tr>
+          <td><a href="/admin/traces/{html.escape(turn_id)}"><code>{html.escape(turn_id[:10])}</code></a></td>
+          <td>{html.escape(ts)}</td>
+          <td>{html.escape(str(phone_v))}</td>
+          <td>{html.escape(user_msg)}</td>
+          <td>{html.escape(specs)}</td>
+          <td>{n_bubbles}</td>
+          <td>{latency} ms</td>
+          <td><span class="tag muted">{html.escape(str(rel))}</span></td>
+        </tr>""")
+
+    phone_input = html.escape(phone or "")
+    body = f"""
+    <h1>Recent Turns ({len(paths)})</h1>
+    <div class="sub">每个 turn 嘅 planner / specialists / writer 详情。点 turn_id 入去睇。</div>
+    <form style="margin: 0.8rem 0;">
+      <input type="text" name="phone" placeholder="filter by phone, e.g. +85291234567"
+        value="{phone_input}" style="padding:0.4rem 0.6rem;border:1px solid var(--line);border-radius:6px;width:280px;">
+      <button type="submit" style="padding:0.4rem 0.8rem;background:var(--accent);color:white;border:0;border-radius:6px;">Filter</button>
+      <a href="/admin/traces" style="margin-left:0.6rem;font-size:0.85rem;">Clear</a>
+    </form>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>turn_id</th><th>at</th><th>phone</th><th>message</th>
+          <th>specialists</th><th>bubbles</th><th>latency</th><th>path</th>
+        </tr></thead>
+        <tbody>{''.join(rows) or '<tr><td colspan="8" style="text-align:center;color:var(--muted);">(no traces yet)</td></tr>'}</tbody>
+      </table>
+    </div>
+    """
+    return HTMLResponse(_wrap_page("Traces", "traces", body))
+
+
+@router.get("/admin/traces/{turn_id}", response_class=HTMLResponse)
+async def trace_detail(request: Request, turn_id: str) -> HTMLResponse:
+    tw = _get_trace_writer(request)
+    bundle = tw.read(turn_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail=f"no trace for turn_id={turn_id}")
+
+    d = bundle.model_dump(mode="json")
+    return HTMLResponse(_wrap_page(
+        f"Trace · {turn_id[:10]}", "traces", _render_trace_detail(d, turn_id),
+    ))
+
+
+def _render_trace_detail(d: dict[str, Any], turn_id: str) -> str:
+    # ── Header / CRM
+    received = (d.get("received_at") or "")[:19].replace("T", " ")
+    user_msg = d.get("user_message") or ""
+    crm = d.get("crm_snapshot") or {}
+    crm_kv = "\n".join(
+        f"  {k}: {v}"
+        for k, v in [
+            ("status", crm.get("status")),
+            ("constitution", crm.get("constitution")),
+            ("name", crm.get("name") or "(unknown)"),
+            ("district", crm.get("district") or "—"),
+            ("pain_points", crm.get("pain_points")),
+            ("products_pitched", crm.get("products_pitched")),
+            ("appointments_count", len(crm.get("appointments") or [])),
+            ("history_msg_count", len(crm.get("conversation_history") or [])),
+            ("temp_state_keys", list((crm.get("temp_state") or {}).keys())),
+        ]
+        if v is not None
+    )
+
+    # ── Planner
+    planner_step = d.get("planner") or {}
+    p_in = planner_step.get("input", {})
+    p_out = planner_step.get("output", {})
+    planner_block = f"""
+    <div class="card">
+      <h2 style="margin-top:0;">🧭 Planner <span class="pill">{html.escape(planner_step.get('model','?'))}</span></h2>
+      <div class="kv">
+        <div class="k">specialists</div><div><strong>{', '.join(p_out.get('specialists') or [])}</strong></div>
+        <div class="k">mode</div><div><span class="tag green">{html.escape(p_out.get('mode','?'))}</span></div>
+        <div class="k">reasoning</div><div>{html.escape(p_out.get('reasoning',''))}</div>
+        <div class="k">notes_for_writer</div><div>{html.escape(p_out.get('notes_for_writer','') or '(none)')}</div>
+        <div class="k">proactive_hint</div><div>{html.escape(p_out.get('proactive_hint','') or '(none)')}</div>
+        <div class="k">latency</div><div>{planner_step.get('latency_ms',0)} ms</div>
+        <div class="k">tokens</div><div>in={planner_step.get('input_tokens',0)} / out={planner_step.get('output_tokens',0)}</div>
+      </div>
+    </div>
+    """
+
+    # ── Specialists
+    spec_blocks = []
+    for s in d.get("specialists") or []:
+        name = s.get("name", "?")
+        payload = s.get("output", {}).get("payload", {}) if isinstance(s.get("output"), dict) else {}
+        tools = s.get("tools_called") or []
+        cards = s.get("cards_read") or []
+        tools_html = "".join(
+            f'<details><summary>🛠 {html.escape(t.get("name","?"))}</summary>'
+            f'<div class="body"><pre>{html.escape(json.dumps(t, ensure_ascii=False, indent=2))}</pre></div></details>'
+            for t in tools
+        ) or '<span class="tag muted">no tools called</span>'
+        cards_html = "".join(
+            f'<span class="tag kb">{html.escape(c)}</span>' for c in cards
+        ) or '<span class="tag muted">no cards</span>'
+        err = s.get("error")
+        err_html = f'<div class="tag red">ERROR: {html.escape(str(err))}</div>' if err else ""
+
+        spec_blocks.append(f"""
+        <div class="card">
+          <h2 style="margin-top:0;">🤖 {html.escape(name).upper()} <span class="pill gray">{html.escape(s.get('model','?'))}</span></h2>
+          {err_html}
+          <div class="kv">
+            <div class="k">latency</div><div>{s.get('latency_ms',0)} ms</div>
+            <div class="k">tokens</div><div>in={s.get('input_tokens',0)} / out={s.get('output_tokens',0)}</div>
+            <div class="k">cards read</div><div>{cards_html}</div>
+          </div>
+          <h3>Tools called</h3>{tools_html}
+          <details><summary>Full payload</summary><div class="body"><pre class="scroll">{html.escape(json.dumps(payload, ensure_ascii=False, indent=2))}</pre></div></details>
+        </div>
+        """)
+
+    spec_html = "".join(spec_blocks) or '<div class="card"><span class="tag muted">no specialists ran</span></div>'
+
+    # ── Writer
+    w = d.get("writer") or {}
+    w_out = (w.get("output") or {})
+    bubbles = w_out.get("bubbles") or []
+    media = w_out.get("media_to_send") or []
+    bubbles_html = "<br>".join(
+        f'<div class="bubble">{html.escape(b)}</div>' for b in bubbles
+    ) or '<span class="tag muted">no bubbles</span>'
+    media_html = "<br>".join(
+        f'<div><span class="tag tool">after_bubble_idx={m.get("after_bubble_idx","?")}</span>'
+        f' <code>{html.escape(str(m.get("url","")))}</code></div>'
+        for m in media
+    ) or '<span class="tag muted">no media</span>'
+
+    writer_block = f"""
+    <div class="card">
+      <h2 style="margin-top:0;">✍️ Writer <span class="pill writer">{html.escape(w.get('model','?'))}</span></h2>
+      <div class="kv">
+        <div class="k">latency</div><div>{w.get('latency_ms',0)} ms</div>
+        <div class="k">tokens</div><div>in={w.get('input_tokens',0)} / out={w.get('output_tokens',0)}</div>
+      </div>
+      <h3>Bubbles sent</h3>
+      <div>{bubbles_html}</div>
+      <h3>Media attached</h3>
+      <div>{media_html}</div>
+    </div>
+    """
+
+    # ── CRM diff
+    diff = d.get("crm_diff") or {}
+    if diff:
+        diff_rows = "".join(
+            f"<tr><td><code>{html.escape(k)}</code></td>"
+            f"<td><pre style=\"margin:0;\">{html.escape(json.dumps(v.get('before'), ensure_ascii=False))}</pre></td>"
+            f"<td><pre style=\"margin:0;\">{html.escape(json.dumps(v.get('after'), ensure_ascii=False))}</pre></td></tr>"
+            for k, v in diff.items()
+        )
+        diff_html = f"<table><thead><tr><th>field</th><th>before</th><th>after</th></tr></thead><tbody>{diff_rows}</tbody></table>"
+    else:
+        diff_html = '<span class="tag muted">no CRM mutation this turn</span>'
+
+    # ── Send log
+    sends = d.get("send_log") or []
+    send_html = (
+        "<table><tr><th>idx</th><th>text</th><th>media</th><th>sent_at</th><th>wa_msg_id</th></tr>"
+        + "".join(
+            f"<tr><td>{s.get('bubble_idx','?')}</td><td>{html.escape(s.get('text','')[:80])}</td>"
+            f"<td>{html.escape(str(s.get('media_url','')))}</td>"
+            f"<td>{html.escape(str(s.get('sent_at','')))}</td>"
+            f"<td>{html.escape(str(s.get('wa_message_id','')))}</td></tr>"
+            for s in sends
+        )
+        + "</table>"
+    ) if sends else '<span class="tag muted">no send log (dev mode or pre-send error)</span>'
+
+    fatal = d.get("fatal_error")
+    fatal_html = (
+        f'<div class="card" style="background:#fce4dc;color:#c44d3a;"><strong>⚠️ FATAL:</strong> '
+        f'<code>{html.escape(str(fatal))}</code></div>' if fatal else ""
+    )
+
+    return f"""
+    <a href="/admin/traces" style="font-size:0.9rem;">← all traces</a>
+    <h1>Turn <code>{html.escape(turn_id)}</code></h1>
+    <div class="sub">{html.escape(received)} · {html.escape(str(d.get('phone','?')))} · {d.get('total_latency_ms',0)} ms total</div>
+    {fatal_html}
+
+    <div class="card">
+      <h2 style="margin-top:0;">👤 User Message</h2>
+      <div class="bubble user">{html.escape(user_msg)}</div>
+      {f'<div class="sub">merged from: {", ".join(d.get("merged_from_fragments") or [])}</div>' if d.get("merged_from_fragments") else ""}
+      {f'<div class="sub">media URLs: {", ".join(d.get("media_urls") or [])}</div>' if d.get("media_urls") else ""}
+      <h3>CRM Snapshot (pre-turn)</h3>
+      <pre>{html.escape(crm_kv)}</pre>
+    </div>
+
+    {planner_block}
+
+    <h2>Specialists ({len(d.get('specialists') or [])})</h2>
+    {spec_html}
+
+    {writer_block}
+
+    <div class="card">
+      <h2 style="margin-top:0;">📤 Send Log</h2>{send_html}
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0;">🔄 CRM Diff</h2>{diff_html}
+    </div>
+    <div class="card">
+      <details><summary>Raw bundle (debug)</summary>
+        <div class="body"><pre class="scroll">{html.escape(json.dumps(d, ensure_ascii=False, indent=2))}</pre></div>
+      </details>
+    </div>
+    """

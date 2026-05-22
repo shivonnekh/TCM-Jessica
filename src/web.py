@@ -26,6 +26,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.admin_views import router as admin_router
 from src.agents.registry import build_specialist_registry
 from src.crm.repo_factory import open_crm_repo, resolve_database_url
 from src.llm import LLMClient
@@ -107,6 +108,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="TCM-Jessica", version="0.1.0", lifespan=lifespan)
 app.include_router(whatsapp_router)
+app.include_router(admin_router)
 
 # Public-readable static media — ChatDaddy fetches these via the URL
 # Jessica writes into `WriterOutput.media_to_send`.
