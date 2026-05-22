@@ -1,0 +1,26 @@
+{
+  "_meta": {
+    "description": "Acupoint name → local image path map. Used by FAQ Agent to surface point images when KB cards mention them. Image files live at data/media/acupoints/<slug>.jpg|png. Ported from dr-baba-agent/static/acupoint_images.",
+    "last_updated": "2026-05-22"
+  },
+  "points": [
+    {"zh": "百勞穴", "aliases": ["百勞", "bailao"], "image": "data/media/acupoints/bailao.jpg"},
+    {"zh": "承山穴", "aliases": ["承山", "chengshan"], "image": "data/media/acupoints/chengshan.jpg"},
+    {"zh": "大陵穴", "aliases": ["大陵", "daling"], "image": "data/media/acupoints/daling.jpg"},
+    {"zh": "地機穴", "aliases": ["地機", "地机", "diji"], "image": "data/media/acupoints/diji.jpg"},
+    {"zh": "飛揚穴", "aliases": ["飛揚", "飞扬", "feiyang"], "image": "data/media/acupoints/feiyang.jpg"},
+    {"zh": "風池穴", "aliases": ["風池", "风池", "fengchi"], "image": "data/media/acupoints/fengchi.jpg"},
+    {"zh": "合谷穴", "aliases": ["合谷", "hegu", "LI4"], "image": "data/media/acupoints/hegu.png"},
+    {"zh": "肩外俞穴", "aliases": ["肩外俞", "jianwaishu"], "image": "data/media/acupoints/jianwaishu.jpg"},
+    {"zh": "內關穴", "aliases": ["內關", "内关", "neiguan"], "image": "data/media/acupoints/neiguan.jpg"},
+    {"zh": "顴髎穴", "aliases": ["顴髎", "颧髎", "quanliao"], "image": "data/media/acupoints/quanliao.jpg"},
+    {"zh": "三陰交穴", "aliases": ["三陰交", "三阴交", "sanyinjiao"], "image": "data/media/acupoints/sanyinjiao.jpg"},
+    {"zh": "四白穴", "aliases": ["四白", "sibai"], "image": "data/media/acupoints/sibai.jpg"},
+    {"zh": "太衝穴", "aliases": ["太衝", "太冲", "taichong"], "image": "data/media/acupoints/taichong.jpg"},
+    {"zh": "天容穴", "aliases": ["天容", "tianrong"], "image": "data/media/acupoints/tianrong.jpg"},
+    {"zh": "陽白穴", "aliases": ["陽白", "阳白", "yangbai"], "image": "data/media/acupoints/yangbai.jpg"},
+    {"zh": "迎香穴", "aliases": ["迎香", "yingxiang"], "image": "data/media/acupoints/yingxiang.jpg"},
+    {"zh": "湧泉穴", "aliases": ["湧泉", "涌泉", "yongquan"], "image": "data/media/acupoints/yongquan.jpg"},
+    {"zh": "中府穴", "aliases": ["中府", "zhongfu"], "image": "data/media/acupoints/zhongfu.jpg"}
+  ]
+}

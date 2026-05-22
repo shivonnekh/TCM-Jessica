@@ -30,6 +30,7 @@ from src.llm import LLMClient
 
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
 from src.crm.models import Constitution
+from src.tools.acupoint_images import AcupointImageMap
 from src.tools.kb_index import KBIndex
 from src.tools.kb_search import KBSearch, SearchHit
 from src.tools.recipe_extractor import RecipeExtractor, recipe_to_dict
@@ -82,6 +83,11 @@ class FAQAgent:
         # hybrid semantic fallback. Otherwise stay keyword-only.
         self._search = kb_search or KBSearch(self._kb)
         self._recipes = RecipeExtractor()
+        try:
+            self._acupoints = AcupointImageMap()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("AcupointImageMap unavailable: %s", exc)
+            self._acupoints = None
         self._client = client
         self._model = model
         self._max_tokens = max_tokens
@@ -205,6 +211,28 @@ class FAQAgent:
         # Always pass the top-card raw content so Writer can compose a
         # detailed how-to / recipe answer rather than terse facts.
         payload["top_card_content"] = top_card_content
+
+        # If the topic is acupressure / 穴位, scan content for points we
+        # have images for and attach to payload so Writer can media them.
+        payload.setdefault("acupoint_images", [])
+        if self._acupoints is not None:
+            search_blob = " ".join(
+                [
+                    inp.user_message,
+                    top_card_content.get("title", ""),
+                    top_card_content.get("core_answer", ""),
+                    " ".join(top_card_content.get("supporting_points", [])),
+                ]
+            )
+            found = self._acupoints.find_in_text(search_blob, max_results=4)
+            if found:
+                payload["acupoint_images"] = [
+                    {
+                        "name": pt.zh,
+                        "image_url": AcupointImageMap.absolute_url(pt.image_path),
+                    }
+                    for pt in found
+                ]
 
         output = SpecialistOutput(
             specialist=SpecialistName.FAQ,
