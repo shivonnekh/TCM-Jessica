@@ -225,21 +225,32 @@ def _rule_overrides(
             ),
         )
 
-    # FUNNEL: user asks for soups again after we've already shown free
-    # recipes once → pivot to paid pitch. They've sampled the free menu,
-    # now it's time to upsell.
-    shown_count = int((user.temp_state or {}).get("faq_recipes_shown_count", 0))
-    if _wants_soup_list(user_message) and shown_count >= 1:
-        return PlannerDecision(
-            specialists=[SpecialistName.SALES],
-            mode="solo",
-            reasoning=f"rule: repeat soup ask (shown {shown_count}x) → pivot to paid",
-            notes_for_writer=(
-                "用戶上次已經睇過免費食譜，依家又問湯水 — 直接列我哋 10 款預製"
-                "湯水：價錢 + 圖片 + 1 句功效。最後問「想要邊款，我幫你跟進」。"
-                "唔好再次推免費食譜。"
-            ),
-        )
+    # FUNNEL: user asks for soups again → pivot to paid pitch. We
+    # detect "repeat ask" from any of three signals:
+    #   (a) temp_state.faq_recipes_shown_count >= 1
+    #   (b) user message includes "再" / "more" / "其他" / "另外" — even
+    #       first turn, the wording itself implies they want more
+    #   (c) prior Jessica reply in last 4 turns mentioned a recipe title
+    #       (e.g. healthy-food.hk free recipe — they're cycling back)
+    if _wants_soup_list(user_message):
+        shown_count = int((user.temp_state or {}).get("faq_recipes_shown_count", 0))
+        wants_more = _wants_more(user_message)
+        history_shows_recipes = _history_has_recipe_mention(user.conversation_history)
+        if shown_count >= 1 or wants_more or history_shows_recipes:
+            why = (
+                f"shown_count={shown_count}, wants_more={wants_more},"
+                f" history_recipe={history_shows_recipes}"
+            )
+            return PlannerDecision(
+                specialists=[SpecialistName.SALES],
+                mode="solo",
+                reasoning=f"rule: repeat soup ask ({why}) → pivot to paid",
+                notes_for_writer=(
+                    "用戶想要更多湯水推介 — pivot 去付費。**必須**列晒我哋 10 款"
+                    "預製湯水：每款 名 + 價錢 + 1 句功效 + 圖片。最後問「想要"
+                    "邊款，我幫你跟進」。唔好再推免費食譜。"
+                ),
+            )
 
     # User has finished constitution + now shows buying interest →
     # NOW pitch paid products (Sales). Constitution itself does FREE
@@ -383,6 +394,41 @@ def _wants_soup_list(text: str) -> bool:
     if not text:
         return False
     return any(kw in text for kw in _SOUP_LIST_KEYWORDS)
+
+
+# Phrases that signal "give me more" — strong pivot-to-paid signal even
+# on first turn (e.g. user lands and says '再嚟啲湯水推介').
+_WANTS_MORE_KEYWORDS = (
+    "再", "再嚟", "再来", "更多", "其他", "另外", "別嘅", "别的",
+    "more", "another", "其他款", "別款", "别款",
+)
+
+
+def _wants_more(text: str) -> bool:
+    if not text:
+        return False
+    return any(kw in text for kw in _WANTS_MORE_KEYWORDS)
+
+
+_RECIPE_TITLE_MARKERS = (
+    "—",      # 「健脾安神—太子參淮蓮紅棗粥」 style
+    "healthy-food.hk",
+    "免費食譜",
+    "家用食譜",
+)
+
+
+def _history_has_recipe_mention(history: Any) -> bool:
+    """Did Jessica recently send free-recipe content?"""
+    if not history:
+        return False
+    for msg in list(history)[-6:]:
+        if getattr(msg, "role", None) != "jessica":
+            continue
+        content = (getattr(msg, "content", "") or "")[:600]
+        if any(m in content for m in _RECIPE_TITLE_MARKERS):
+            return True
+    return False
 
 
 # Buying-intent signals — when user post-diagnosis says any of these,
