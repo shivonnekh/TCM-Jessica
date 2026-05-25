@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS users (
     notes           TEXT NOT NULL DEFAULT '',
     tags            TEXT NOT NULL DEFAULT '[]',
     temp_state      TEXT NOT NULL DEFAULT '{}',
+    -- Menstrual cycle tracking (optional — female users only)
+    last_period_start  TEXT,                      -- ISO date YYYY-MM-DD, nullable
+    cycle_length_days  INTEGER NOT NULL DEFAULT 28,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );

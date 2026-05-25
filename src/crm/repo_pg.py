@@ -89,9 +89,11 @@ class CRMRepoPG:
                 INSERT INTO users (
                     phone, name, status, age, location, district, constitution,
                     pain_points, products_pitched, products_purchased,
-                    notes, tags, temp_state, created_at, updated_at
+                    notes, tags, temp_state,
+                    last_period_start, cycle_length_days,
+                    created_at, updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
                 ON CONFLICT (phone) DO UPDATE SET
                     name = EXCLUDED.name,
                     status = EXCLUDED.status,
@@ -105,6 +107,8 @@ class CRMRepoPG:
                     notes = EXCLUDED.notes,
                     tags = EXCLUDED.tags,
                     temp_state = EXCLUDED.temp_state,
+                    last_period_start = EXCLUDED.last_period_start,
+                    cycle_length_days = EXCLUDED.cycle_length_days,
                     updated_at = EXCLUDED.updated_at
                 """,
                 user.phone,
@@ -120,6 +124,8 @@ class CRMRepoPG:
                 user.notes,
                 json.dumps(user.tags, ensure_ascii=False),
                 json.dumps(user.temp_state, ensure_ascii=False),
+                user.last_period_start.isoformat() if user.last_period_start else None,
+                user.cycle_length_days,
                 user.created_at.isoformat(),
                 user.updated_at.isoformat(),
             )
@@ -420,6 +426,20 @@ def _row_to_user(
         temp_state = json.loads(row["temp_state"] or "{}")
     except (KeyError, TypeError):
         temp_state = {}
+    from datetime import date as _date
+
+    raw_period = row.get("last_period_start") if hasattr(row, "get") else None
+    try:
+        raw_period = raw_period or row["last_period_start"]
+    except (KeyError, IndexError):
+        raw_period = None
+
+    cycle_days = 28
+    try:
+        cycle_days = int(row["cycle_length_days"] or 28)
+    except (KeyError, IndexError, TypeError, ValueError):
+        pass
+
     return User(
         phone=row["phone"],
         name=row["name"],
@@ -434,6 +454,8 @@ def _row_to_user(
         notes=row["notes"] or "",
         tags=json.loads(row["tags"] or "[]"),
         temp_state=temp_state,
+        last_period_start=_date.fromisoformat(raw_period) if raw_period else None,
+        cycle_length_days=cycle_days,
         conversation_history=history,
         appointments=appointments,
         created_at=datetime.fromisoformat(row["created_at"]),

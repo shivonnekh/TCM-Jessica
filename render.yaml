@@ -1,10 +1,15 @@
 # Render deployment for TCM-Jessica.
 #
 # Free plan with keep-alive ping:
-#   - Free web service ($0/month).
-#   - Sleeps after 15 min idle → ~30-60s cold-start on first request.
+#   - Free web service ($0/month) + free Postgres ($0/month, 1GB, persistent).
+#   - Web service sleeps after 15 min idle → ~30-60s cold-start on first request.
 #   - Combine with a free external cron (cron-job.org, every 10 min) hitting
 #     /health to prevent sleep. See docs/DEPLOYMENT.md.
+
+databases:
+  - name: tcm-jessica-db
+    plan: free
+    region: singapore
 
 services:
   - type: web
@@ -15,7 +20,6 @@ services:
 
     buildCommand: pip install -e .
 
-    # SQLite + traces dir created lazily on first request, no migration step.
     startCommand: uvicorn src.web:app --host 0.0.0.0 --port $PORT
 
     # Render waits for 200 from this path before swapping to the new instance.
@@ -64,11 +68,17 @@ services:
       - key: ORDER_WHATSAPP
         value: "+85252417448"
 
-      # ── Persistence paths — on Render free, disk is ephemeral.
-      # On restart, jessica.db is recreated empty. Trace bundles are
-      # also lost. For dev / first-week launch this is acceptable; if
-      # CRM persistence matters, upgrade to Starter ($7) + attach a disk.
-      - key: DATABASE_PATH
-        value: /tmp/jessica.db
+      # ── Persistent Postgres (auto-injected by Render) ───────
+      # Render wires DATABASE_URL automatically when a database is linked.
+      # repo_factory.py reads DATABASE_URL first → uses CRMRepoPG.
+      # No DATABASE_PATH needed — Postgres is the only backend in production.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tcm-jessica-db
+          property: connectionString
+
+      # ── Trace bundles — ephemeral on free plan ───────────────
+      # Trace JSON files live in /tmp/traces and are lost on restart.
+      # CRM data (users, messages, appointments) is safe in Postgres.
       - key: TRACE_DIR
         value: /tmp/traces

@@ -78,9 +78,11 @@ class CRMRepo:
             INSERT INTO users (
                 phone, name, status, age, location, district, constitution,
                 pain_points, products_pitched, products_purchased,
-                notes, tags, temp_state, created_at, updated_at
+                notes, tags, temp_state,
+                last_period_start, cycle_length_days,
+                created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(phone) DO UPDATE SET
                 name = excluded.name,
                 status = excluded.status,
@@ -94,6 +96,8 @@ class CRMRepo:
                 notes = excluded.notes,
                 tags = excluded.tags,
                 temp_state = excluded.temp_state,
+                last_period_start = excluded.last_period_start,
+                cycle_length_days = excluded.cycle_length_days,
                 updated_at = excluded.updated_at
             """,
             (
@@ -110,6 +114,8 @@ class CRMRepo:
                 user.notes,
                 json.dumps(user.tags, ensure_ascii=False),
                 json.dumps(user.temp_state, ensure_ascii=False),
+                user.last_period_start.isoformat() if user.last_period_start else None,
+                user.cycle_length_days,
                 user.created_at.isoformat(),
                 user.updated_at.isoformat(),
             ),
@@ -416,6 +422,15 @@ def _row_to_user(
     except (IndexError, KeyError):
         temp_state = {}
 
+    # last_period_start may be absent in older DBs that haven't re-run schema.
+    raw_period = None
+    try:
+        raw_period = row["last_period_start"]
+    except (IndexError, KeyError):
+        pass
+
+    from datetime import date as _date
+
     return User(
         phone=row["phone"],
         name=row["name"],
@@ -430,6 +445,8 @@ def _row_to_user(
         notes=row["notes"] or "",
         tags=json.loads(row["tags"] or "[]"),
         temp_state=temp_state,
+        last_period_start=_date.fromisoformat(raw_period) if raw_period else None,
+        cycle_length_days=_try_int(row, "cycle_length_days", 28),
         conversation_history=history,
         appointments=appointments,
         created_at=datetime.fromisoformat(row["created_at"]),
@@ -440,3 +457,12 @@ def _row_to_user(
 def _user_snapshot_to_dict(user: User) -> dict[str, Any]:
     """For trace bundles — JSON-serializable snapshot."""
     return user.model_dump(mode="json")
+
+
+def _try_int(row: Any, key: str, default: int) -> int:
+    """Read an integer column that may be absent in older schema versions."""
+    try:
+        val = row[key]
+        return int(val) if val is not None else default
+    except (IndexError, KeyError, TypeError, ValueError):
+        return default
