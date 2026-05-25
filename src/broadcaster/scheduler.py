@@ -28,6 +28,7 @@ from src.broadcaster.composer import (
     compose_constitution_recheck,
     compose_purchase_followup,
     compose_solar_term_tip,
+    compose_weekly_tea_tip,
     _load_product_names,
 )
 from src.broadcaster.solar_terms import (
@@ -385,6 +386,77 @@ async def _run_constitution_recheck(crm: object, llm: object, account_id: str) -
 
 
 # ---------------------------------------------------------------------------
+# Weekly DIY tea tip broadcast
+# ---------------------------------------------------------------------------
+
+
+async def _run_weekly_tea(crm: object, llm: object, account_id: str) -> None:
+    """Send a weekly DIY tea recipe tip to all active users.
+
+    Dedup key: ``tea-{iso_week}`` — once per ISO week per user.
+    This is a separate channel from the weather cap; it does NOT count
+    against the normal 2x/week weather broadcast limit.
+    """
+    now = datetime.now(HKT)
+
+    if not _within_send_window(now):
+        return
+
+    iso_week = _current_iso_week(now)
+    tea_dedup_key = f"tea-{iso_week}"
+
+    phones = await crm.list_active_phones()
+
+    if not phones:
+        logger.debug("Weekly tea: no active users")
+        return
+
+    logger.info("Weekly tea: checking %d users for week %s", len(phones), iso_week)
+
+    sent_count = 0
+    errors = 0
+
+    for phone in phones:
+        if is_blocked(phone):
+            continue
+
+        # Once per week per user — independent of weather cap
+        try:
+            already_sent = await crm.get_broadcast_count_this_week(phone, tea_dedup_key)
+        except Exception:  # noqa: BLE001
+            already_sent = 0
+
+        if already_sent > 0:
+            continue
+
+        try:
+            user = await crm.get_user(phone)
+            if user is None:
+                continue
+
+            bubbles = await compose_weekly_tea_tip(llm, user)
+            if not bubbles:
+                continue
+
+            await wa_client.send_long_message(account_id, phone, "\n\n".join(bubbles))
+
+            sent_at = datetime.now(HKT).isoformat()
+            await crm.record_broadcast(phone, "weekly_tea", tea_dedup_key, sent_at)
+            sent_count += 1
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Weekly tea: failed for %s: %s", phone[-4:], exc)
+            errors += 1
+
+        await asyncio.sleep(BROADCAST_SEND_PACE_S)
+
+    logger.info(
+        "Weekly tea done — week=%s sent=%d errors=%d",
+        iso_week, sent_count, errors,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Background loop (entry point wired from web.py lifespan)
 # ---------------------------------------------------------------------------
 
@@ -417,3 +489,7 @@ async def start_broadcast_loop(crm: object, llm: object, account_id: str) -> Non
             await _run_constitution_recheck(crm, llm, account_id)
         except Exception as exc:  # noqa: BLE001
             logger.error("Constitution recheck loop error (will retry next cycle): %s", exc)
+        try:
+            await _run_weekly_tea(crm, llm, account_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Weekly tea loop error (will retry next cycle): %s", exc)

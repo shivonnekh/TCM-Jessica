@@ -42,6 +42,10 @@ _AUTUMN_WINTER_CARD = _CARD_DIR / "tcm_seasonal_autumn_winter.json"
 _PRODUCT_CATALOG = (
     Path(__file__).resolve().parent.parent.parent / "data" / "products" / "product_catalog.json"
 )
+_TEA_CARD = (
+    Path(__file__).resolve().parent.parent.parent
+    / "data" / "knowledge_base" / "soups" / "tcm_food_therapy_teas.json"
+)
 
 # Regex guard — reject any bubble that leaks prices
 _PRICE_RE = re.compile(r"HK\$\d+|\$\d+|港幣\s*\d+|價錢|售價")
@@ -404,4 +408,137 @@ def _constitution_recheck_fallback(constitution: str) -> list[str]:
     return [
         f"嗨！上次你評估係{constitution}體質，已經過咗幾個月喇 🌿",
         "體質係會變嘅，特別係換季後。有時間嘅話可以傳張舌頭相俾我，睇下而家體質點？😊",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Tea card loader
+# ---------------------------------------------------------------------------
+
+
+def _load_tea_card() -> str:
+    """Return truncated core_answer from the tea therapy card."""
+    try:
+        raw = json.loads(_TEA_CARD.read_text(encoding="utf-8"))
+        answer: str = raw["knowledge_card"]["core_content"]["core_answer"]
+        # Slightly more than season card — tea content is dense, constitutions need context
+        return answer[:1000]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not load tea card: %s", exc)
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Weekly DIY tea tip composer
+# ---------------------------------------------------------------------------
+
+# Constitutions grouped by TCM thermal nature for fallback selection
+_COLD_CONSTITUTIONS = frozenset({"陽虛質", "氣虛質"})
+_HOT_CONSTITUTIONS = frozenset({"陰虛質", "濕熱質"})
+_STAGNATION_CONSTITUTIONS = frozenset({"氣鬱質", "血瘀質"})
+
+
+async def compose_weekly_tea_tip(
+    llm: object,
+    user: "User",
+) -> list[str]:
+    """Generate a weekly DIY tea recipe tip personalised by constitution.
+
+    1-2 HK Canto bubbles. Includes a simple at-home recipe (ingredients +
+    brew method). No product pitch, no prices, no follow-up questions.
+
+    Returns:
+        1-2 bubble strings. Falls back to a constitution-matched generic
+        recipe if the LLM call fails or produces garbage.
+    """
+    constitution = user.constitution.value if user.constitution else "unknown"
+    tea_knowledge = _load_tea_card()
+
+    system_prompt = """\
+你係 Jessica，心宜中醫 Care Plus 嘅中醫健康顧問。
+今日你主動向用戶分享今週嘅 DIY 茶飲配方，俾佢喺屋企自己整，保養身體。
+
+⚠️ 絕對規則（唔可以違反）：
+- 唔好問 follow-up 問題
+- 唔好自我介紹（唔好講「我係 Jessica」）
+- 唔好提任何具體付費產品名稱、價錢或售價
+- 呢個係 DIY 家用茶方——食材係超市/藥材店買到嘅，唔係推銷任何嘢
+- 全部用香港廣東話口語（唔好用書面語或普通話）
+- 控制在 1-2 條訊息，每條唔超過 150 個字
+- 語氣溫暖輕鬆，像朋友分享生活小知識咁
+- 必須提供一個簡單嘅茶飲配方（食材 + 泡法）
+
+輸出格式（JSON only，唔好有其他文字）：
+{"bubbles": ["第一條訊息", "第二條訊息（可選）"]}
+"""
+
+    user_prompt = f"""用戶體質：{constitution}
+
+茶飲養生參考資料（部分節錄，用嚟啟發配方選擇，唔好逐字抄）：
+{tea_knowledge}
+
+請根據用戶體質，推薦一款今週可以自己整嘅 DIY 茶飲配方。包括：
+1. 茶飲名稱（1-2 種材料就夠，唔好太複雜）
+2. 點樣整（水溫 / 分量 / 泡法，一兩句話）
+3. 對呢個體質嘅好處（一句話）
+
+記住：唔好問問題、唔好賣嘢、淨係分享一個溫暖實用嘅家用 tip 就夠。"""
+
+    try:
+        response = await llm.messages.create(
+            model="gpt-4o-mini",
+            max_tokens=300,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw = response.content[0].text.strip()
+
+        if raw.startswith("```"):
+            raw = re.sub(r"^```[a-z]*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw)
+
+        data = json.loads(raw)
+        bubbles = [b.strip() for b in data.get("bubbles", []) if b.strip()]
+
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Weekly tea compose failed (%s): %s — using fallback",
+            type(exc).__name__, exc,
+        )
+        return _tea_fallback(constitution)
+
+    if not bubbles:
+        return _tea_fallback(constitution)
+
+    cleaned: list[str] = []
+    for bubble in bubbles[:MAX_BUBBLES]:
+        if _PRICE_RE.search(bubble):
+            logger.warning("Tea bubble contains price — stripping: %s", bubble)
+            continue
+        cleaned.append(bubble[:BUBBLE_MAX])
+
+    return cleaned if cleaned else _tea_fallback(constitution)
+
+
+def _tea_fallback(constitution: str) -> list[str]:
+    """Constitution-matched fallback tea tips when LLM is unavailable."""
+    if constitution in _COLD_CONSTITUTIONS:
+        return [
+            "今週茶飲 ☕ 薑棗茶：生薑兩片 + 紅棗三粒，熱水焗 10 分鐘。"
+            "暖胃驅寒，氣虛 / 陽虛體質最適合，早上飲最好 🌿",
+        ]
+    if constitution in _HOT_CONSTITUTIONS:
+        return [
+            "今週茶飲 🌸 菊花枸杞茶：菊花五朵 + 枸杞一小把，"
+            "85 度水焗 5 分鐘。清肝明目，陰虛 / 濕熱體質恩物 ✨",
+        ]
+    if constitution in _STAGNATION_CONSTITUTIONS:
+        return [
+            "今週茶飲 🌹 玫瑰花茶：玫瑰花五六朵，85 度水焗五分鐘。"
+            "疏肝解鬱、舒緩壓力，氣鬱 / 血瘀體質特別適合 💕",
+        ]
+    # Default — 平和質 or unknown
+    return [
+        "今週茶飲 🍵 茉莉花茶：茉莉花茶包一包，85 度水焗三分鐘。"
+        "性平提神，大部分體質都啱飲，日頭飲最好 🌿",
     ]
