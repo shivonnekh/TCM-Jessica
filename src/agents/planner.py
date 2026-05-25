@@ -36,7 +36,7 @@ from src.agents.base import (
     SpecialistName,
     render_specialist_menu_zh,
 )
-from src.agents.sales_agent import _ORDER_RE
+from src.agents.sales_agent import _ORDER_RE, _TS_AWAITING_ADDRESS
 from src.crm.models import Constitution, User, UserStatus
 from src.tools import prompt_overrides
 
@@ -193,6 +193,20 @@ def _rule_overrides(
             notes_for_writer=(
                 "用戶係透過購買連結落單。Sales Agent 已經識別產品同定咗 CRM。"
                 "唔好再 pitch，唔好再介紹產品 — 依照 writer_hint 確認訂單 + 問收件資料。"
+            ),
+        )
+
+    # Mid-delivery-address collection — user is responding to "please send
+    # your address". Route to Sales so it can save the address and close
+    # the order flow. Mirrors the appointment_proposed pattern.
+    if user.temp_state.get(_TS_AWAITING_ADDRESS):
+        return PlannerDecision(
+            specialists=[SpecialistName.SALES],
+            mode="solo",
+            reasoning="rule: awaiting delivery address → Sales (address collection)",
+            notes_for_writer=(
+                "用戶正在提供收件資料。Sales Agent 已處理。"
+                "依照 writer_hint 確認收到地址，唔好 pitch 嘢。"
             ),
         )
 

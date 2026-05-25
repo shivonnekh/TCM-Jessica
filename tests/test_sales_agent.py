@@ -7,6 +7,9 @@ import pytest
 from src.agents.base import SpecialistInput, SpecialistName
 from src.agents.sales_agent import (
     SalesAgent,
+    _TS_AWAITING_ADDRESS,
+    _TS_PENDING_ORDER_NAME,
+    _is_address_content,
     _is_purchase_confirmation,
     _parse_order_message,
 )
@@ -287,6 +290,116 @@ async def test_order_received_skips_address_when_known(sales: SalesAgent) -> Non
     output, _usage = await sales.run(inp)
 
     assert output.payload["needs_delivery_address"] is False
+
+
+# ---------------------------------------------------------------------------
+# Delivery address state machine
+# ---------------------------------------------------------------------------
+
+
+def test_is_address_content_true() -> None:
+    valid = [
+        "九龍旺角彌敦道123號",
+        "陳大文，旺角，9876 5432",
+        "荃灣青山公路450號",
+        "我係沙田住",
+    ]
+    for text in valid:
+        assert _is_address_content(text) is True, f"Should be address: {text!r}"
+
+
+def test_is_address_content_false() -> None:
+    invalid = [
+        "幾時到？",
+        "係咪要埋電話？",
+        "好",
+        "ok",
+        "",
+        "送到哪裡？",
+    ]
+    for text in invalid:
+        assert _is_address_content(text) is False, f"Should NOT be address: {text!r}"
+
+
+@pytest.mark.asyncio
+async def test_order_received_sets_awaiting_address_temp_state(
+    sales: SalesAgent,
+) -> None:
+    """After order received, temp_state marks awaiting_delivery=True."""
+    user = User(phone="+85291234567")  # no location
+    inp = SpecialistInput(user=user, user_message="想訂【彭魚鰓解毒湯 HK$120】")
+    output, _ = await sales.run(inp)
+
+    diff = output.suggested_user_state_diff
+    ts = diff.get("temp_state", {})
+    assert ts.get(_TS_AWAITING_ADDRESS) is True
+    assert ts.get(_TS_PENDING_ORDER_NAME) == "彭魚鰓解毒湯"
+
+
+@pytest.mark.asyncio
+async def test_order_received_no_awaiting_when_address_known(
+    sales: SalesAgent,
+) -> None:
+    """If user already has district, awaiting_delivery should be False."""
+    user = User(phone="+85291234567", district="旺角")
+    inp = SpecialistInput(user=user, user_message="想訂【清心潤肺湯 HK$48】")
+    output, _ = await sales.run(inp)
+
+    ts = output.suggested_user_state_diff.get("temp_state", {})
+    assert ts.get(_TS_AWAITING_ADDRESS) is False
+
+
+@pytest.mark.asyncio
+async def test_address_reply_saves_location_and_clears_state(
+    sales: SalesAgent,
+) -> None:
+    """User sends address → location saved, temp_state cleared."""
+    user = User(
+        phone="+85291234567",
+        temp_state={
+            _TS_AWAITING_ADDRESS: True,
+            _TS_PENDING_ORDER_NAME: "彭魚鰓解毒湯",
+        },
+    )
+    address = "陳大文，旺角彌敦道123號，9876 5432"
+    inp = SpecialistInput(user=user, user_message=address)
+    output, _ = await sales.run(inp)
+
+    assert output.payload["intent"] == "delivery_address_received"
+    diff = output.suggested_user_state_diff
+    assert diff.get("location") == address
+    # temp_state must be cleared of the awaiting flag
+    remaining_ts = diff.get("temp_state", {})
+    assert _TS_AWAITING_ADDRESS not in remaining_ts
+
+
+@pytest.mark.asyncio
+async def test_address_reply_extracts_district(sales: SalesAgent) -> None:
+    """District extracted from address text and saved to user.district."""
+    user = User(
+        phone="+85291234567",
+        temp_state={_TS_AWAITING_ADDRESS: True, _TS_PENDING_ORDER_NAME: "湯"},
+    )
+    inp = SpecialistInput(user=user, user_message="我係旺角，彌敦道999號，陳小姐")
+    output, _ = await sales.run(inp)
+
+    diff = output.suggested_user_state_diff
+    assert diff.get("district") == "旺角"
+
+
+@pytest.mark.asyncio
+async def test_question_during_address_keeps_state(sales: SalesAgent) -> None:
+    """User asks a question while awaiting address → state preserved, re-ask in hint."""
+    user = User(
+        phone="+85291234567",
+        temp_state={_TS_AWAITING_ADDRESS: True, _TS_PENDING_ORDER_NAME: "彭魚鰓解毒湯"},
+    )
+    inp = SpecialistInput(user=user, user_message="係咪要埋電話號碼？")
+    output, _ = await sales.run(inp)
+
+    assert output.payload["intent"] == "address_pending_question"
+    # temp_state untouched — still awaiting
+    assert output.suggested_user_state_diff == {}
 
 
 @pytest.mark.asyncio

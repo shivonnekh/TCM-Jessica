@@ -64,6 +64,36 @@ def test_wame_order_fires_before_other_rules() -> None:
     assert decision.specialists == [SpecialistName.SALES]
 
 
+def test_awaiting_delivery_address_routes_to_sales() -> None:
+    """User in mid-address-collection state → Sales (not anything else)."""
+    from src.agents.sales_agent import _TS_AWAITING_ADDRESS
+
+    user = User(
+        phone="+85291234567",
+        status=UserStatus.QUALIFIED,
+        temp_state={_TS_AWAITING_ADDRESS: True},
+    )
+    decision = _rule_overrides(user, "旺角彌敦道123號，陳大文，9876 5432", [])
+    assert decision is not None
+    assert decision.specialists == [SpecialistName.SALES]
+    assert "address" in decision.reasoning.lower()
+
+
+def test_new_order_overrides_awaiting_address_state() -> None:
+    """A new wa.me order message takes priority even when awaiting an address."""
+    from src.agents.sales_agent import _TS_AWAITING_ADDRESS
+
+    user = User(
+        phone="+85291234567",
+        temp_state={_TS_AWAITING_ADDRESS: True},
+    )
+    # A new order message → order rule fires first (before address rule)
+    decision = _rule_overrides(user, "想訂【清心潤肺湯 HK$48】", [])
+    assert decision is not None
+    assert decision.specialists == [SpecialistName.SALES]
+    assert "order" in decision.reasoning.lower()
+
+
 def test_regular_message_is_not_order() -> None:
     """'我想訂湯' (no bracket format) does NOT trigger order rule → falls through."""
     user = User(phone="+85291234567", status=UserStatus.QUALIFIED)

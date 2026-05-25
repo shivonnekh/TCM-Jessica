@@ -14,7 +14,8 @@ used by tests.
 
 Output payload schema:
     {
-        "intent": "pitch_products" | "answer_pricing" | "share_catalog" | "no_match" | "purchase_confirmed",
+        "intent": "pitch_products" | "answer_pricing" | "share_catalog" | "no_match"
+                | "purchase_confirmed" | "order_received" | "delivery_address_received",
         "products_to_pitch": [
             {
                 "product_id": str,
@@ -57,6 +58,13 @@ logger = logging.getLogger("agents.sales")
 DEFAULT_MODEL = "gpt-4o-mini"
 MAX_PRODUCTS_PER_TURN = 3
 MIN_CANDIDATES_TO_INVOKE_LLM = 1
+
+# ---------------------------------------------------------------------------
+# temp_state keys — namespaced to avoid collisions with other agents
+# ---------------------------------------------------------------------------
+_TS_AWAITING_ADDRESS = "order_awaiting_delivery"   # bool: True when collecting address
+_TS_PENDING_ORDER_ID = "order_pending_product_id"  # str: product_id being fulfilled
+_TS_PENDING_ORDER_NAME = "order_pending_product_name"  # str: display name for writer
 
 
 _SYSTEM = """你係 Jessica 嘅 Sales Specialist —— 揀啱嘅產品比 Writer 推介。
@@ -122,6 +130,15 @@ class SalesAgent:
         if parsed_order is not None:
             return (
                 self._order_received_output(user, parsed_order),
+                _no_llm_usage(),
+            )
+
+        # Mid-delivery-address collection — user is replying with their
+        # address after an order was received. Route here before any pitch
+        # logic so the address doesn't get misinterpreted as a symptom.
+        if user.temp_state.get(_TS_AWAITING_ADDRESS):
+            return (
+                self._handle_address_reply(user, inp.user_message),
                 _no_llm_usage(),
             )
 
@@ -647,6 +664,15 @@ class SalesAgent:
             "唔好再 pitch 其他產品，唔好提價錢，呢轉係確認訂單。"
         )
 
+        # Build updated temp_state: mark that we're awaiting the delivery address.
+        # Persist product info so the address-reply handler can reference it.
+        new_temp_state = {
+            **user.temp_state,
+            _TS_AWAITING_ADDRESS: needs_address,  # False if address already known
+            _TS_PENDING_ORDER_ID: order.product_id or "",
+            _TS_PENDING_ORDER_NAME: order.product_name,
+        }
+
         payload = {
             "intent": "order_received",
             "ordered_product_id": order.product_id,
@@ -662,6 +688,7 @@ class SalesAgent:
             suggested_user_state_diff={
                 "status": "bought",
                 "products_purchased_append": [order.product_id] if order.product_id else [],
+                "temp_state": new_temp_state,
             },
             cards_used=[],
             tools_called=[
@@ -678,6 +705,88 @@ class SalesAgent:
                     },
                 }
             ],
+        )
+
+    def _handle_address_reply(self, user: Any, message: str) -> SpecialistOutput:
+        """User is replying with their delivery address after placing an order.
+
+        Two cases:
+        - Message looks like address info → save, clear state, confirm.
+        - Message looks like a question → re-ask gently, keep state alive.
+        """
+        product_name = user.temp_state.get(_TS_PENDING_ORDER_NAME, "你嘅產品")
+        product_id = user.temp_state.get(_TS_PENDING_ORDER_ID, "")
+
+        if not _is_address_content(message):
+            # User asked a question or sent something ambiguous — hold the state,
+            # re-ask for address after answering.
+            payload = {
+                "intent": "address_pending_question",
+                "pending_product_name": product_name,
+                "stage": "post_purchase",
+                "writer_hint": (
+                    f"用戶係落咗{product_name}單之後問咗一個問題。\n"
+                    "Bubble 1: 簡短回答問題（如果係養生/飲法問題就答，否則話唔知）。\n"
+                    "Bubble 2: 溫和提醒仍然需要收件資料：「順帶一提，"
+                    "方便俾我全名、送貨地址同聯絡電話嗎？我幫你跟診所安排寄出 🙏」"
+                ),
+            }
+            # Keep temp_state unchanged — still awaiting address
+            return SpecialistOutput(
+                specialist=SpecialistName.SALES,
+                payload=payload,
+                suggested_user_state_diff={},  # no change
+                cards_used=[],
+                tools_called=[{
+                    "name": "Sales.address_pending",
+                    "args": {"message_classified_as": "question"},
+                    "result": {"state": "still_awaiting_address"},
+                }],
+            )
+
+        # Address content received — save it, clear the pending state.
+        cleared_temp_state = {
+            k: v for k, v in user.temp_state.items()
+            if k not in (_TS_AWAITING_ADDRESS, _TS_PENDING_ORDER_ID, _TS_PENDING_ORDER_NAME)
+        }
+
+        # Try to extract a HK district for the structured district field.
+        detected_district = _extract_district(message) or user.district
+
+        payload = {
+            "intent": "delivery_address_received",
+            "delivery_info_raw": message.strip(),
+            "product_name": product_name,
+            "stage": "post_purchase",
+            "writer_hint": (
+                f"用戶提供咗送貨資料俾{product_name}。\n"
+                "Bubble 1: 溫暖確認已收到地址（一句，唔好重複地址）。\n"
+                "Bubble 2: 話會轉俾診所安排，叫用戶稍候（唔好承諾具體送貨日期）。\n"
+                "Bubble 3: 邀請佢收到貨後話我知感受 😊\n"
+                "唔好再 pitch 嘢，唔好提價錢，呢轉係純粹完成訂單流程。"
+            ),
+        }
+        diff: dict[str, Any] = {
+            "location": message.strip(),
+            "temp_state": cleared_temp_state,
+        }
+        if detected_district and not user.district:
+            diff["district"] = detected_district
+
+        return SpecialistOutput(
+            specialist=SpecialistName.SALES,
+            payload=payload,
+            suggested_user_state_diff=diff,
+            cards_used=[],
+            tools_called=[{
+                "name": "Sales.address_received",
+                "args": {
+                    "product_id": product_id,
+                    "delivery_info_length": len(message),
+                    "district_extracted": detected_district,
+                },
+                "result": {"state": "address_saved", "location_set": True},
+            }],
         )
 
     def _purchase_confirmed_output(self, user: Any) -> SpecialistOutput:
@@ -932,6 +1041,50 @@ _PURCHASE_CONFIRM_KEYWORDS = (
     "confirm 咗", "confirmed 咗", "done 喇", "done了", "done咗",
     "搞掂", "搞定", "完成咗", "下咗單",
 )
+
+
+# ---------------------------------------------------------------------------
+# Address content helpers
+# ---------------------------------------------------------------------------
+
+# Common HK districts for extraction from free-text address replies.
+_HK_DISTRICTS: tuple[str, ...] = (
+    "尖沙咀", "荃灣", "葵涌", "青衣", "馬鞍山", "將軍澳",
+    "鴨脷洲", "黃竹坑", "堅尼地城", "上水", "粉嶺", "大埔", "火炭",
+    "大圍", "沙田", "九龍塘", "旺角", "佐敦", "油麻地", "美孚",
+    "荔枝角", "黃大仙", "鑽石山", "中環", "銅鑼灣", "北角", "太古",
+    "鰂魚涌", "西灣河", "筲箕灣", "灣仔", "金鐘", "上環", "香港仔",
+    "烏溪沙", "西貢", "坑口", "寶琳", "元朗", "屯門",
+)
+
+
+def _extract_district(text: str) -> str | None:
+    """Return the first HK district found in the text, or None."""
+    for d in _HK_DISTRICTS:
+        if d in text:
+            return d
+    return None
+
+
+def _is_address_content(text: str) -> bool:
+    """True if the message looks like delivery address info (not a question).
+
+    Heuristics (in order of confidence):
+    - Contains a `？` / `?` → question, not an address.
+    - Shorter than 4 chars → too short to be an address (e.g. "ok", "好").
+    - Otherwise → treat as address content.
+
+    We err on the side of accepting — users in address-collection state
+    are almost always replying with address info, not complex queries.
+    """
+    stripped = text.strip() if text else ""
+    if not stripped:
+        return False
+    if "？" in stripped or "?" in stripped:
+        return False
+    if len(stripped) < 4:  # noqa: PLR2004
+        return False
+    return True
 
 
 def _is_purchase_confirmation(text: str) -> bool:
