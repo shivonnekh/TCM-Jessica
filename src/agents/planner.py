@@ -36,6 +36,7 @@ from src.agents.base import (
     SpecialistName,
     render_specialist_menu_zh,
 )
+from src.agents.sales_agent import _is_purchase_confirmation
 from src.crm.models import Constitution, User, UserStatus
 from src.tools import prompt_overrides
 
@@ -223,6 +224,21 @@ def _rule_overrides(
             specialists=[SpecialistName.CASUAL],
             mode="solo",
             reasoning="rule: repeat 'hi' / returning user — casual not onboarding",
+        )
+
+    # User confirms they've placed an order ("我訂咗" / "買咗" etc.)
+    # → Sales Agent detects this and records the purchase in CRM.
+    # Must fire before "where to buy" / "wants to buy" rules so past-tense
+    # "落單咗" doesn't accidentally trigger a new pitch.
+    if _is_purchase_confirmation(user_message) and user.products_pitched:
+        return PlannerDecision(
+            specialists=[SpecialistName.SALES],
+            mode="solo",
+            reasoning="rule: user confirmed purchase → record + warm follow-up",
+            notes_for_writer=(
+                "用戶話已經落單！唔好再 pitch，唔好再講價錢。"
+                "溫暖祝賀，提提飲法保存，邀請佢飲完分享感受。"
+            ),
         )
 
     # User explicitly wants free / DIY content → KB lookup, NOT Sales.

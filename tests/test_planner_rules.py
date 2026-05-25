@@ -45,3 +45,27 @@ def test_returning_user_says_hi_routes_to_casual() -> None:
     assert decision is not None
     assert decision.specialists == [SpecialistName.CASUAL]
     assert decision.mode == "solo"
+
+
+def test_purchase_confirmation_routes_to_sales() -> None:
+    """'我訂咗' from a user who has seen a pitch → Sales (not Greeting)."""
+    user = User(
+        phone="+85291234567",
+        status=UserStatus.QUALIFIED,
+        products_pitched=["soup_pengyu_jiedu"],
+    )
+    decision = _rule_overrides(user, "我訂咗喇！多謝！", [])
+    assert decision is not None
+    assert decision.specialists == [SpecialistName.SALES]
+
+
+def test_purchase_confirmation_no_pitch_falls_through() -> None:
+    """'訂咗' from a user who has never seen a pitch → falls through to LLM."""
+    user = User(
+        phone="+85291234567",
+        status=UserStatus.NEW,
+        products_pitched=[],  # never pitched
+    )
+    decision = _rule_overrides(user, "訂咗喇", [])
+    # No pitch history → guard fails → falls through to LLM
+    assert decision is None

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src.agents.base import SpecialistInput, SpecialistName
-from src.agents.sales_agent import SalesAgent
+from src.agents.sales_agent import SalesAgent, _is_purchase_confirmation
 from src.crm.models import Constitution, User
 
 
@@ -116,3 +116,117 @@ async def test_suggested_state_diff_appends_pitched_ids(sales: SalesAgent) -> No
     diff = output.suggested_user_state_diff
     assert "products_pitched_append" in diff
     assert diff["products_pitched_append"]  # non-empty
+
+
+# ---------------------------------------------------------------------------
+# Purchase confirmation detection (keyword function)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "我訂咗",
+        "訂咗喇",
+        "落單咗",
+        "落咗單",
+        "買咗",
+        "已經訂",
+        "訂好咗",
+        "搞掂",
+        "done 喇",
+        "付咗款",
+        "已下單",
+    ],
+)
+def test_is_purchase_confirmation_true(text: str) -> None:
+    assert _is_purchase_confirmation(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "我想訂",
+        "點落單",
+        "邊度買",
+        "落單",        # present-tense, not past
+        "想要",
+        "幾錢",
+        "",
+        "你好",
+    ],
+)
+def test_is_purchase_confirmation_false(text: str) -> None:
+    assert _is_purchase_confirmation(text) is False
+
+
+# ---------------------------------------------------------------------------
+# Purchase confirmation routing + CRM diff
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_purchase_confirmation_sets_status_bought(sales: SalesAgent) -> None:
+    """When user says '我訂咗' and has products_pitched, status becomes 'bought'."""
+    user = User(
+        phone="+85291234567",
+        constitution=Constitution.SHIRE,
+        products_pitched=["soup_pengyu_jiedu", "soup_sijun"],
+    )
+    inp = SpecialistInput(user=user, user_message="我訂咗喇，多謝！")
+    output, _usage = await sales.run(inp)
+
+    assert output.payload["intent"] == "purchase_confirmed"
+    diff = output.suggested_user_state_diff
+    assert diff.get("status") == "bought"
+    assert "products_purchased_append" in diff
+    # Should reference the last-pitched products
+    assert diff["products_purchased_append"]  # non-empty
+
+
+@pytest.mark.asyncio
+async def test_purchase_confirmation_records_last_pitched(sales: SalesAgent) -> None:
+    """products_purchased_append should contain the last ≤3 pitched products."""
+    pitched = ["soup_a", "soup_b", "soup_c", "soup_d"]
+    user = User(
+        phone="+85291234567",
+        products_pitched=pitched,
+    )
+    inp = SpecialistInput(user=user, user_message="落單咗！")
+    output, _usage = await sales.run(inp)
+
+    diff = output.suggested_user_state_diff
+    # Should be last 3 of the pitched list
+    assert diff["products_purchased_append"] == ["soup_b", "soup_c", "soup_d"]
+
+
+@pytest.mark.asyncio
+async def test_purchase_confirmation_skipped_when_no_pitched(
+    sales: SalesAgent,
+) -> None:
+    """If user says '訂咗' but has never seen a pitch, treat as normal message."""
+    user = User(
+        phone="+85291234567",
+        constitution=Constitution.SHIRE,
+        products_pitched=[],  # ← never pitched anything
+    )
+    inp = SpecialistInput(user=user, user_message="訂咗喇")
+    output, _usage = await sales.run(inp)
+
+    # No pitch + no products → no_match (not purchase_confirmed)
+    assert output.payload["intent"] != "purchase_confirmed"
+
+
+@pytest.mark.asyncio
+async def test_purchase_confirmed_writer_hint_present(sales: SalesAgent) -> None:
+    """Purchase confirmed payload includes a writer_hint for the response."""
+    user = User(
+        phone="+85291234567",
+        products_pitched=["soup_pengyu_jiedu"],
+    )
+    inp = SpecialistInput(user=user, user_message="買咗啦！")
+    output, _usage = await sales.run(inp)
+
+    assert output.payload["intent"] == "purchase_confirmed"
+    assert "writer_hint" in output.payload
+    assert "purchase_confirmed" in output.tools_called[0]["name"]

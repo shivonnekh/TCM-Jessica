@@ -14,7 +14,7 @@ used by tests.
 
 Output payload schema:
     {
-        "intent": "pitch_products" | "answer_pricing" | "share_catalog" | "no_match",
+        "intent": "pitch_products" | "answer_pricing" | "share_catalog" | "no_match" | "purchase_confirmed",
         "products_to_pitch": [
             {
                 "product_id": str,
@@ -111,6 +111,15 @@ class SalesAgent:
         self, inp: SpecialistInput
     ) -> tuple[SpecialistOutput, dict[str, Any]]:
         user = inp.user
+
+        # Detect purchase confirmation ("我訂咗" / "買咗" etc.) FIRST.
+        # When user confirms they ordered, record it in CRM + respond warmly.
+        # Must check before "where to buy" so "落單咗" doesn't re-trigger a pitch.
+        if _is_purchase_confirmation(inp.user_message) and user.products_pitched:
+            return (
+                self._purchase_confirmed_output(user),
+                _no_llm_usage(),
+            )
 
         # Detect "where to buy / 邊度買" intent. When user explicitly asks
         # about how/where to purchase, we always show real products with
@@ -513,7 +522,7 @@ class SalesAgent:
                 + (playbook.consultation_backstop if playbook else "")
                 + "」\n"
                 f"Bubble {len(products)+3} (CTA): 問「想試邊款？同我講你嘅"
-                "選擇 + 收件地址，我幫你跟進。」\n"
+                "選擇 + 收件地址，我幫你跟進。訂完記得話我知呀 😊」\n"
                 "唔好提 WhatsApp 號碼，唔好倒晒 10 款 — focus 呢 3 款。"
             ),
             "writer_must_not_say": [
@@ -595,6 +604,54 @@ class SalesAgent:
             ],
         )
 
+    def _purchase_confirmed_output(self, user: Any) -> SpecialistOutput:
+        """User confirmed they placed an order. Record it + signal Writer to celebrate.
+
+        We mark the last-pitched products (up to 3) as purchased, since we
+        can't know exactly which item was bought without asking. This is a
+        deliberate approximation — close enough for care follow-ups.
+        """
+        # Identify what was most likely purchased: last 3 pitched products.
+        purchased_ids = list(user.products_pitched[-3:])
+
+        # Resolve product names for the writer hint.
+        all_products = {p.product_id: p for p in self._catalog.all_products}
+        purchased_names = [
+            all_products[pid].name for pid in purchased_ids if pid in all_products
+        ]
+
+        payload = {
+            "intent": "purchase_confirmed",
+            "purchased_product_ids": purchased_ids,
+            "purchased_product_names": purchased_names,
+            "stage": "post_purchase",
+            "writer_hint": (
+                "用戶確認咗已經落單！\n"
+                "Bubble 1: 恭喜 / 好嘢嘅口吻，一句就夠，唔好太長（例如「好嘢！"
+                "訂咗就放心喇 🎉」）。\n"
+                "Bubble 2: 溫馨提示佢點樣保存 / 飲法（唔知就講「收到貨後包裝上"
+                "有說明」）。\n"
+                "Bubble 3: 邀請佢飲完之後話我知感受（「飲完記得同我分享吓感覺呀！」）。\n"
+                "唔好賣更多嘢，唔好提價錢，唔好問多餘問題 — 今次係純粹慶祝同關心。"
+            ),
+        }
+        return SpecialistOutput(
+            specialist=SpecialistName.SALES,
+            payload=payload,
+            suggested_user_state_diff={
+                "status": "bought",
+                "products_purchased_append": purchased_ids,
+            },
+            cards_used=[],
+            tools_called=[
+                {
+                    "name": "Sales.purchase_confirmed",
+                    "args": {"pitched_last_3": purchased_ids},
+                    "result": {"recorded_as_purchased": purchased_ids},
+                }
+            ],
+        )
+
     def _where_to_buy_output(
         self, user: Any, user_message: str
     ) -> SpecialistOutput:
@@ -671,7 +728,7 @@ class SalesAgent:
                 + (playbook.consultation_backstop if playbook else "")
                 + "」\n"
                 "最後一 bubble: 「想要邊款？同我講你嘅選擇 + 收件地址我幫你跟"
-                "進。」**絕對唔好**叫客 WhatsApp 任何外部號碼。\n\n"
+                "進。訂完記得話我知呀 😊」**絕對唔好**叫客 WhatsApp 任何外部號碼。\n\n"
                 "規矩：用「方向：xxx」框架，唔好用「你應該買」「治療」「療效」"
                 "「包好」呢類斷言。"
             ),
@@ -728,6 +785,30 @@ def _wants_where_to_buy(text: str) -> bool:
     if not text:
         return False
     return any(kw in text for kw in _WHERE_TO_BUY_KEYWORDS)
+
+
+# Past-tense purchase confirmation signals — user already placed an order.
+# Distinct from _WHERE_TO_BUY_KEYWORDS (which express *intent* to buy).
+# All of these indicate a completed action: "咗" suffix or equivalent.
+_PURCHASE_CONFIRM_KEYWORDS = (
+    "訂咗", "订咗", "落咗單", "落單咗", "落咗order", "落咗 order",
+    "買咗", "买咗", "訂好", "订好", "訂好咗",
+    "已經訂", "已经订", "已下單", "已下单", "已訂購", "已订购",
+    "落咗", "俾咗錢", "付咗款", "付款咗",
+    "confirm 咗", "confirmed 咗", "done 喇", "done了", "done咗",
+    "搞掂", "搞定", "完成咗", "下咗單",
+)
+
+
+def _is_purchase_confirmation(text: str) -> bool:
+    """True if the user is confirming they already placed an order.
+
+    Checks for past-tense purchase language. Only meaningful when the user
+    has previously seen a pitch (products_pitched non-empty).
+    """
+    if not text:
+        return False
+    return any(kw in text for kw in _PURCHASE_CONFIRM_KEYWORDS)
 
 
 _OINTMENT_KEYWORDS_LOCAL = (
