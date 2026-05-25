@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+import zoneinfo
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+_HKT = zoneinfo.ZoneInfo("Asia/Hong_Kong")
 
 import asyncpg
 
@@ -313,6 +316,41 @@ class CRMRepoPG:
                 """,
                 followup_cutoff,
                 activity_cutoff,
+                limit,
+            )
+        return [row["phone"] for row in rows]
+
+
+    async def list_phones_for_upcoming_appointments(
+        self,
+        within_hours: int = 48,
+        limit: int = 5000,
+    ) -> list[str]:
+        """Phones with a *confirmed* appointment in the next ``within_hours`` hours.
+
+        Uses local HKT time for comparison because appointment date/time is
+        stored in clinic-local (HKT) format without timezone offset.
+        """
+        now = datetime.now(_HKT)
+        cutoff = now + timedelta(hours=within_hours)
+        now_str = now.strftime("%Y-%m-%d %H:%M")
+        cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M")
+
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT DISTINCT a.phone
+                FROM appointments a
+                JOIN users u ON a.phone = u.phone
+                WHERE u.status NOT IN ('churned', 'opted_out')
+                  AND a.status = 'confirmed'
+                  AND (a.date || ' ' || a.time) >= $1
+                  AND (a.date || ' ' || a.time) <  $2
+                ORDER BY (a.date || ' ' || a.time) ASC
+                LIMIT $3
+                """,
+                now_str,
+                cutoff_str,
                 limit,
             )
         return [row["phone"] for row in rows]

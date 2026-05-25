@@ -9,9 +9,12 @@ close at shutdown).
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import zoneinfo
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+_HKT = zoneinfo.ZoneInfo("Asia/Hong_Kong")
 
 import aiosqlite
 
@@ -331,6 +334,43 @@ class CRMRepo:
             LIMIT ?
             """,
             (followup_cutoff, activity_cutoff, limit),
+        )
+        rows = await cur.fetchall()
+        return [row["phone"] for row in rows]
+
+    async def list_phones_for_upcoming_appointments(
+        self,
+        within_hours: int = 48,
+        limit: int = 5000,
+    ) -> list[str]:
+        """Phones with a *confirmed* appointment in the next ``within_hours`` hours.
+
+        Uses local HKT time for comparison because appointment date/time is
+        stored in clinic-local (HKT) format without timezone offset.
+
+        Args:
+            within_hours: look-ahead window in hours (default 48).
+            limit: safety cap on results.
+        """
+        now = datetime.now(_HKT)
+        cutoff = now + timedelta(hours=within_hours)
+        # Stored format: date='YYYY-MM-DD', time='HH:MM' → concat gives 'YYYY-MM-DD HH:MM'
+        now_str = now.strftime("%Y-%m-%d %H:%M")
+        cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M")
+
+        cur = await self._db.execute(
+            """
+            SELECT DISTINCT a.phone
+            FROM appointments a
+            JOIN users u ON a.phone = u.phone
+            WHERE u.status NOT IN ('churned', 'opted_out')
+              AND a.status = 'confirmed'
+              AND (a.date || ' ' || a.time) >= ?
+              AND (a.date || ' ' || a.time) <  ?
+            ORDER BY (a.date || ' ' || a.time) ASC
+            LIMIT ?
+            """,
+            (now_str, cutoff_str, limit),
         )
         rows = await cur.fetchall()
         return [row["phone"] for row in rows]
