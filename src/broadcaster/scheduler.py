@@ -31,6 +31,7 @@ from src.broadcaster.composer import (
     compose_weekly_tea_tip,
     _load_product_names,
 )
+from src.broadcaster.menstrual_care import run_menstrual_care
 from src.broadcaster.solar_terms import (
     get_active_solar_term,
     solar_term_condition_code_for_year,
@@ -493,3 +494,7 @@ async def start_broadcast_loop(crm: object, llm: object, account_id: str) -> Non
             await _run_weekly_tea(crm, llm, account_id)
         except Exception as exc:  # noqa: BLE001
             logger.error("Weekly tea loop error (will retry next cycle): %s", exc)
+        try:
+            await run_menstrual_care(crm, llm, account_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Menstrual care loop error (will retry next cycle): %s", exc)

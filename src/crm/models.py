@@ -9,7 +9,7 @@ Schema rules:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -104,6 +104,10 @@ class User(BaseModel):
     products_pitched: list[str] = Field(default_factory=list)
     products_purchased: list[str] = Field(default_factory=list)
     appointments: list[AppointmentRecord] = Field(default_factory=list)
+
+    # Menstrual cycle tracking (optional — female users only)
+    last_period_start: date | None = None
+    cycle_length_days: int = 28  # default 28-day cycle
 
     notes: str = ""
     tags: list[str] = Field(default_factory=list)

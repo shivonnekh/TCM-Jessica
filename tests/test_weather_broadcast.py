@@ -406,6 +406,7 @@ class TestRunPurchaseFollowup:
         mock_bubbles = ["嗨！上次訂咗清心潤肺湯，有冇飲到呀？🌿"]
 
         with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler._within_send_window", return_value=True), \
              patch("src.broadcaster.scheduler.wa_client") as mock_wa, \
              patch("src.broadcaster.scheduler.compose_purchase_followup",
                    new_callable=AsyncMock, return_value=mock_bubbles), \
@@ -855,6 +856,7 @@ class TestRunWeeklyTea:
         mock_bubbles = ["今週茶飲：薑棗茶，暖胃驅寒 🌿"]
 
         with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler._within_send_window", return_value=True), \
              patch("src.broadcaster.scheduler.wa_client") as mock_wa, \
              patch("src.broadcaster.scheduler.compose_weekly_tea_tip",
                    new_callable=AsyncMock, return_value=mock_bubbles):
@@ -868,7 +870,6 @@ class TestRunWeeklyTea:
         args = crm.record_broadcast.call_args[0]
         assert args[0] == phone
         assert args[1] == "weekly_tea"
-        # Dedup key should follow the tea-{iso_week} pattern
         assert args[2].startswith("tea-")
 
     @pytest.mark.asyncio
@@ -880,13 +881,13 @@ class TestRunWeeklyTea:
         llm = MagicMock()
 
         with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler._within_send_window", return_value=True), \
              patch("src.broadcaster.scheduler.wa_client") as mock_wa, \
              patch("src.broadcaster.scheduler.compose_weekly_tea_tip",
                    new_callable=AsyncMock, return_value=["嗨！菊花枸杞茶 🌸"]):
             mock_wa.send_long_message = AsyncMock()
             await _run_weekly_tea(crm, llm, "acc_123")
 
-        # get_broadcast_count_this_week was called with the tea dedup key
         call_args = crm.get_broadcast_count_this_week.call_args[0]
         assert call_args[0] == phone
         assert call_args[1].startswith("tea-")
@@ -900,6 +901,7 @@ class TestRunWeeklyTea:
         llm = MagicMock()
 
         with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler._within_send_window", return_value=True), \
              patch("src.broadcaster.scheduler.wa_client") as mock_wa, \
              patch("src.broadcaster.scheduler._user_is_eligible",
                    new_callable=AsyncMock, return_value=False) as mock_eligible, \
@@ -908,7 +910,5 @@ class TestRunWeeklyTea:
             mock_wa.send_long_message = AsyncMock()
             await _run_weekly_tea(crm, llm, "acc_123")
 
-        # Weather cap was NOT consulted — tea is independent
         mock_eligible.assert_not_called()
-        # And the message was still sent
         mock_wa.send_long_message.assert_called_once()
