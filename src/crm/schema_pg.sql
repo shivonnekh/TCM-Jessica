@@ -54,3 +54,16 @@ CREATE TABLE IF NOT EXISTS appointments (
 
 CREATE INDEX IF NOT EXISTS idx_appointments_phone ON appointments(phone);
 CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
+
+-- Proactive broadcast tracking — per-user weekly cap (max 2/week)
+CREATE TABLE IF NOT EXISTS user_broadcasts (
+    id              SERIAL PRIMARY KEY,
+    phone           TEXT NOT NULL,
+    sent_at         TEXT NOT NULL,
+    condition_code  TEXT NOT NULL,
+    iso_week        TEXT NOT NULL,
+    FOREIGN KEY (phone) REFERENCES users(phone) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_broadcasts_phone_week
+    ON user_broadcasts(phone, iso_week);

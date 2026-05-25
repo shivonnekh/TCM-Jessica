@@ -212,6 +212,55 @@ class CRMRepo:
         )
         await self._db.commit()
 
+    # ---------------------------------------------------------------
+    # Broadcast tracking (proactive weather care — per-user weekly cap)
+    # ---------------------------------------------------------------
+
+    async def list_active_phones(self, limit: int = 5000) -> list[str]:
+        """Phones eligible to receive proactive broadcasts (not churned/opted-out)."""
+        cur = await self._db.execute(
+            """
+            SELECT phone FROM users
+            WHERE status NOT IN ('churned', 'opted_out')
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = await cur.fetchall()
+        return [row["phone"] for row in rows]
+
+    async def get_broadcast_count_this_week(self, phone: str, iso_week: str) -> int:
+        """How many broadcasts this user has received in the given ISO week."""
+        cur = await self._db.execute(
+            "SELECT COUNT(*) AS cnt FROM user_broadcasts WHERE phone = ? AND iso_week = ?",
+            (phone, iso_week),
+        )
+        row = await cur.fetchone()
+        return int(row["cnt"]) if row else 0
+
+    async def get_last_broadcast_at(self, phone: str) -> str | None:
+        """ISO timestamp of the most recent broadcast sent to this user, or None."""
+        cur = await self._db.execute(
+            "SELECT MAX(sent_at) AS last FROM user_broadcasts WHERE phone = ?",
+            (phone,),
+        )
+        row = await cur.fetchone()
+        return row["last"] if row and row["last"] else None
+
+    async def record_broadcast(
+        self, phone: str, condition_code: str, iso_week: str, sent_at: str
+    ) -> None:
+        """Persist a sent broadcast for cap tracking."""
+        await self._db.execute(
+            """
+            INSERT INTO user_broadcasts (phone, sent_at, condition_code, iso_week)
+            VALUES (?, ?, ?, ?)
+            """,
+            (phone, sent_at, condition_code, iso_week),
+        )
+        await self._db.commit()
+
     async def _load_appointments(self, phone: str) -> list[AppointmentRecord]:
         cur = await self._db.execute(
             """

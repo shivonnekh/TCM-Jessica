@@ -129,6 +129,18 @@ async def lifespan(app: FastAPI):
             "Set it before exposing the webhook publicly."
         )
 
+    # Proactive weather broadcast loop — opt-in via env var (default OFF).
+    # Requires CHATDADDY_ACCOUNT_ID + OPENAI_API_KEY to be set.
+    if os.environ.get("BROADCAST_ENABLED", "false").lower() == "true":
+        from src.broadcaster.scheduler import start_broadcast_loop
+        from src.whatsapp.router import DEFAULT_ACCOUNT_ID
+        background_tasks.append(
+            asyncio.create_task(
+                start_broadcast_loop(crm, client, DEFAULT_ACCOUNT_ID)
+            )
+        )
+        logger.info("Broadcast loop scheduled (interval=6h, cap=2/user/week)")
+
     try:
         yield
     finally:

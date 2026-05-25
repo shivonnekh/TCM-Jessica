@@ -198,6 +198,59 @@ class CRMRepoPG:
                 appt.booked_at.isoformat(),
             )
 
+    # ---------------------------------------------------------------
+    # Broadcast tracking (proactive weather care — per-user weekly cap)
+    # ---------------------------------------------------------------
+
+    async def list_active_phones(self, limit: int = 5000) -> list[str]:
+        """Phones eligible to receive proactive broadcasts (not churned/opted-out)."""
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT phone FROM users
+                WHERE status NOT IN ('churned', 'opted_out')
+                ORDER BY updated_at DESC
+                LIMIT $1
+                """,
+                limit,
+            )
+        return [row["phone"] for row in rows]
+
+    async def get_broadcast_count_this_week(self, phone: str, iso_week: str) -> int:
+        """How many broadcasts this user has received in the given ISO week."""
+        async with self._pool.acquire() as conn:
+            val = await conn.fetchval(
+                "SELECT COUNT(*) FROM user_broadcasts WHERE phone = $1 AND iso_week = $2",
+                phone,
+                iso_week,
+            )
+        return int(val or 0)
+
+    async def get_last_broadcast_at(self, phone: str) -> str | None:
+        """ISO timestamp of the most recent broadcast sent to this user, or None."""
+        async with self._pool.acquire() as conn:
+            val = await conn.fetchval(
+                "SELECT MAX(sent_at) FROM user_broadcasts WHERE phone = $1",
+                phone,
+            )
+        return val
+
+    async def record_broadcast(
+        self, phone: str, condition_code: str, iso_week: str, sent_at: str
+    ) -> None:
+        """Persist a sent broadcast for cap tracking."""
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO user_broadcasts (phone, sent_at, condition_code, iso_week)
+                VALUES ($1, $2, $3, $4)
+                """,
+                phone,
+                sent_at,
+                condition_code,
+                iso_week,
+            )
+
 
 # -------------------------------------------------------------------
 # Helpers
