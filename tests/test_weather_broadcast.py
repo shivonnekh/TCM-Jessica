@@ -1,4 +1,4 @@
-"""Tests for the proactive weather broadcast feature.
+"""Tests for the proactive weather broadcast + purchase follow-up features.
 
 Covers:
   - weather_service: condition detection (pure — no I/O)
@@ -328,3 +328,173 @@ class TestUserEligibility:
         crm = self._make_crm(count=1, last_at=past.isoformat())
         now = datetime(2026, 5, 25, 10, 0, tzinfo=HKT)
         assert await _user_is_eligible(crm, "+85291234567", "2026-W21", now) is True
+
+
+# ---------------------------------------------------------------------------
+# Purchase follow-up: scheduler helpers
+# ---------------------------------------------------------------------------
+
+
+class TestFollowupCutoffs:
+    """Verify cutoff timestamp calculation used by list_phones_for_purchase_followup."""
+
+    def test_activity_cutoff_is_3_days_ago(self):
+        from src.broadcaster.scheduler import FOLLOWUP_QUIET_DAYS
+        now = datetime(2026, 5, 25, 10, 0, tzinfo=HKT)
+        cutoff = (now - timedelta(days=FOLLOWUP_QUIET_DAYS)).isoformat()
+        cutoff_dt = datetime.fromisoformat(cutoff)
+        delta = now - cutoff_dt
+        assert abs(delta.total_seconds() - FOLLOWUP_QUIET_DAYS * 86400) < 60
+
+    def test_followup_cooldown_is_30_days(self):
+        from src.broadcaster.scheduler import FOLLOWUP_COOLDOWN_DAYS
+        now = datetime(2026, 5, 25, 10, 0, tzinfo=HKT)
+        cutoff = (now - timedelta(days=FOLLOWUP_COOLDOWN_DAYS)).isoformat()
+        cutoff_dt = datetime.fromisoformat(cutoff)
+        delta = now - cutoff_dt
+        assert abs(delta.total_seconds() - FOLLOWUP_COOLDOWN_DAYS * 86400) < 60
+
+
+# ---------------------------------------------------------------------------
+# Purchase follow-up: run logic
+# ---------------------------------------------------------------------------
+
+
+class TestRunPurchaseFollowup:
+    def _make_crm(self, phones: list[str], user_products: list[str]) -> object:
+        from src.crm.models import User
+
+        crm = MagicMock()
+        crm.list_phones_for_purchase_followup = AsyncMock(return_value=phones)
+        crm.record_broadcast = AsyncMock()
+
+        user = User(phone=phones[0] if phones else "+85291234567")
+        object.__setattr__(user, "products_purchased", user_products)
+        crm.get_user = AsyncMock(return_value=user)
+        return crm
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_eligible_phones(self):
+        from src.broadcaster.scheduler import _run_purchase_followup
+        crm = self._make_crm(phones=[], user_products=[])
+        llm = MagicMock()
+
+        with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler.wa_client") as mock_wa:
+            await _run_purchase_followup(crm, llm, "acc_123")
+            mock_wa.send_long_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_blocked_phone(self):
+        from src.broadcaster.scheduler import _run_purchase_followup
+        crm = self._make_crm(phones=["+85291234567"], user_products=["soup_qingxin_runfei"])
+        llm = MagicMock()
+
+        with patch("src.broadcaster.scheduler.is_blocked", return_value=True), \
+             patch("src.broadcaster.scheduler.wa_client") as mock_wa:
+            await _run_purchase_followup(crm, llm, "acc_123")
+            mock_wa.send_long_message.assert_not_called()
+            crm.record_broadcast.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sends_and_records_for_eligible_user(self):
+        from src.broadcaster.scheduler import _run_purchase_followup
+        phone = "+85291234567"
+        crm = self._make_crm(phones=[phone], user_products=["soup_qingxin_runfei"])
+        llm = MagicMock()
+
+        mock_bubbles = ["嗨！上次訂咗清心潤肺湯，有冇飲到呀？🌿"]
+
+        with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler.wa_client") as mock_wa, \
+             patch("src.broadcaster.scheduler.compose_purchase_followup",
+                   new_callable=AsyncMock, return_value=mock_bubbles), \
+             patch("src.broadcaster.scheduler._load_product_names", return_value=[
+                 {"id": "soup_qingxin_runfei", "name": "清心潤肺湯", "benefit": "安神"}
+             ]):
+            mock_wa.send_long_message = AsyncMock()
+            await _run_purchase_followup(crm, llm, "acc_123")
+
+        mock_wa.send_long_message.assert_called_once_with(
+            "acc_123", phone, mock_bubbles[0]
+        )
+        crm.record_broadcast.assert_called_once()
+        args = crm.record_broadcast.call_args[0]
+        assert args[0] == phone
+        assert args[1] == "purchase_followup"
+
+    @pytest.mark.asyncio
+    async def test_skips_user_with_no_products(self):
+        """CRM returns phone but user.products_purchased is empty — skip."""
+        from src.broadcaster.scheduler import _run_purchase_followup
+        phone = "+85291234567"
+        crm = self._make_crm(phones=[phone], user_products=[])
+        llm = MagicMock()
+
+        with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler.wa_client") as mock_wa:
+            await _run_purchase_followup(crm, llm, "acc_123")
+            mock_wa.send_long_message.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Purchase follow-up: composer
+# ---------------------------------------------------------------------------
+
+
+class TestPurchaseFollowupComposer:
+    def _make_user(self):
+        from src.crm.models import User
+        return User(phone="+85291234567")
+
+    @pytest.mark.asyncio
+    async def test_returns_fallback_on_llm_failure(self):
+        from src.broadcaster.composer import compose_purchase_followup
+        llm = MagicMock()
+        llm.messages.create = AsyncMock(side_effect=Exception("LLM down"))
+        user = self._make_user()
+        products = [{"id": "soup_qingxin_runfei", "name": "清心潤肺湯", "benefit": "安神"}]
+
+        bubbles = await compose_purchase_followup(llm, user, products)
+        assert len(bubbles) >= 1
+        assert isinstance(bubbles[0], str)
+        assert len(bubbles[0]) > 0
+
+    @pytest.mark.asyncio
+    async def test_returns_fallback_for_empty_products(self):
+        from src.broadcaster.composer import compose_purchase_followup
+        llm = MagicMock()
+        user = self._make_user()
+
+        bubbles = await compose_purchase_followup(llm, user, [])
+        assert len(bubbles) >= 1
+
+    @pytest.mark.asyncio
+    async def test_strips_price_leak(self):
+        from src.broadcaster.composer import compose_purchase_followup
+        llm = MagicMock()
+        llm.messages.create = AsyncMock(return_value=MagicMock(
+            content=[MagicMock(text='{"bubbles": ["嗨！HK$48嘅湯有冇飲到？", "希望你鐘意！"]}')]
+        ))
+        user = self._make_user()
+        products = [{"id": "soup_qingxin_runfei", "name": "清心潤肺湯", "benefit": "安神"}]
+
+        bubbles = await compose_purchase_followup(llm, user, products)
+        for bubble in bubbles:
+            assert "HK$" not in bubble
+            assert "$48" not in bubble
+
+    @pytest.mark.asyncio
+    async def test_respects_bubble_length_cap(self):
+        from src.broadcaster.composer import compose_purchase_followup, BUBBLE_MAX
+        long_text = "A" * 300
+        llm = MagicMock()
+        llm.messages.create = AsyncMock(return_value=MagicMock(
+            content=[MagicMock(text=f'{{"bubbles": ["{long_text}"]}}')]
+        ))
+        user = self._make_user()
+        products = [{"id": "soup_qingxin_runfei", "name": "清心潤肺湯", "benefit": "安神"}]
+
+        bubbles = await compose_purchase_followup(llm, user, products)
+        for bubble in bubbles:
+            assert len(bubble) <= BUBBLE_MAX

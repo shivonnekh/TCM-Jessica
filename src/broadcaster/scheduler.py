@@ -1,20 +1,19 @@
-"""Proactive broadcast scheduler — daily weather check + per-user cap enforcement.
+"""Proactive broadcast scheduler — weather care + purchase follow-up.
 
 Runs as an asyncio background task (same pattern as ``start_token_refresh_loop``).
 Enable via environment variable: ``BROADCAST_ENABLED=true``
 
-Per-user cap:
-  - Max 2 broadcasts per ISO week per user
-  - Min 36 hours between consecutive broadcasts per user
+Weather broadcast:
+  - Per-user cap: max 2/ISO week, min 36h gap
+  - Send window: 08:00–21:00 HKT
+  - HKO free API: cold front, heatwave, rainstorm, humidity
 
-Send window: 08:00 – 21:00 HKT only (no late-night pings).
+Purchase follow-up:
+  - Triggered when user has products_purchased + gone quiet ≥ 3 days
+  - Max 1 follow-up per 30-day window per user
+  - Warm "How's the soup?" check-in, no sales pitch
 
-The loop wakes every BROADCAST_CHECK_INTERVAL_S (default 6h) and:
-  1. Checks if current time is within send window
-  2. Fetches HKO weather + detects notable condition
-  3. For each active user: checks weekly count + 36h gap
-  4. Composes + sends to eligible users
-  5. Records each send in ``user_broadcasts`` table
+The loop wakes every BROADCAST_CHECK_INTERVAL_S (default 6h) and runs both.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
-from src.broadcaster.composer import compose_broadcast
+from src.broadcaster.composer import compose_broadcast, compose_purchase_followup, _load_product_names
 from src.broadcaster.weather_service import (
     WeatherCondition,
     detect_conditions,
@@ -51,6 +50,10 @@ BROADCAST_WEEKLY_CAP = int(os.environ.get("BROADCAST_WEEKLY_CAP", "2"))
 BROADCAST_MIN_GAP_H = int(os.environ.get("BROADCAST_MIN_GAP_H", "36"))
 SEND_WINDOW_START_H = 8   # 08:00 HKT
 SEND_WINDOW_END_H = 21    # 21:00 HKT
+
+# Purchase follow-up config
+FOLLOWUP_QUIET_DAYS = int(os.environ.get("FOLLOWUP_QUIET_DAYS", "3"))    # days of silence before follow-up
+FOLLOWUP_COOLDOWN_DAYS = int(os.environ.get("FOLLOWUP_COOLDOWN_DAYS", "30"))  # re-send window
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -172,6 +175,63 @@ async def _run_broadcast(crm: object, llm: object, account_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Purchase follow-up run
+# ---------------------------------------------------------------------------
+
+
+async def _run_purchase_followup(crm: object, llm: object, account_id: str) -> None:
+    """Check for users who bought something, went quiet, and need a follow-up."""
+    now = datetime.now(HKT)
+
+    if not _within_send_window(now):
+        return
+
+    activity_cutoff = (now - timedelta(days=FOLLOWUP_QUIET_DAYS)).isoformat()
+    followup_cutoff = (now - timedelta(days=FOLLOWUP_COOLDOWN_DAYS)).isoformat()
+
+    phones = await crm.list_phones_for_purchase_followup(activity_cutoff, followup_cutoff)
+
+    if not phones:
+        logger.debug("Followup: no eligible users")
+        return
+
+    logger.info("Followup: %d users eligible for purchase follow-up", len(phones))
+
+    iso_week = _current_iso_week(now)
+    sent_count = 0
+    errors = 0
+
+    for phone in phones:
+        if is_blocked(phone):
+            continue
+
+        try:
+            user = await crm.get_user(phone)
+            if user is None or not user.products_purchased:
+                continue
+
+            products = _load_product_names(user.products_purchased)
+            bubbles = await compose_purchase_followup(llm, user, products)
+            if not bubbles:
+                continue
+
+            full_text = "\n\n".join(bubbles)
+            await wa_client.send_long_message(account_id, phone, full_text)
+
+            sent_at = datetime.now(HKT).isoformat()
+            await crm.record_broadcast(phone, "purchase_followup", iso_week, sent_at)
+            sent_count += 1
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Followup: failed for %s: %s", phone[-4:], exc)
+            errors += 1
+
+        await asyncio.sleep(BROADCAST_SEND_PACE_S)
+
+    logger.info("Followup cycle done — sent=%d errors=%d", sent_count, errors)
+
+
+# ---------------------------------------------------------------------------
 # Background loop (entry point wired from web.py lifespan)
 # ---------------------------------------------------------------------------
 
@@ -192,3 +252,7 @@ async def start_broadcast_loop(crm: object, llm: object, account_id: str) -> Non
             await _run_broadcast(crm, llm, account_id)
         except Exception as exc:  # noqa: BLE001
             logger.error("Broadcast loop error (will retry next cycle): %s", exc)
+        try:
+            await _run_purchase_followup(crm, llm, account_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Followup loop error (will retry next cycle): %s", exc)

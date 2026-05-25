@@ -251,6 +251,39 @@ class CRMRepoPG:
                 iso_week,
             )
 
+    async def list_phones_for_purchase_followup(
+        self,
+        activity_cutoff: str,
+        followup_cutoff: str,
+        limit: int = 5000,
+    ) -> list[str]:
+        """Phones that bought something, went quiet, and haven't had a follow-up recently."""
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT u.phone
+                FROM users u
+                WHERE u.status NOT IN ('churned', 'opted_out')
+                  AND u.products_purchased NOT IN ('[]', '')
+                  AND u.phone NOT IN (
+                      SELECT phone FROM user_broadcasts
+                      WHERE condition_code = 'purchase_followup'
+                        AND sent_at > $1
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM messages m
+                      WHERE m.phone = u.phone
+                        AND m.at > $2
+                  )
+                ORDER BY u.updated_at ASC
+                LIMIT $3
+                """,
+                followup_cutoff,
+                activity_cutoff,
+                limit,
+            )
+        return [row["phone"] for row in rows]
+
 
 # -------------------------------------------------------------------
 # Helpers

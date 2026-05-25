@@ -261,6 +261,43 @@ class CRMRepo:
         )
         await self._db.commit()
 
+    async def list_phones_for_purchase_followup(
+        self,
+        activity_cutoff: str,
+        followup_cutoff: str,
+        limit: int = 5000,
+    ) -> list[str]:
+        """Phones that bought something, went quiet, and haven't had a follow-up recently.
+
+        Args:
+            activity_cutoff: ISO timestamp — no messages after this = "gone quiet"
+            followup_cutoff: ISO timestamp — no purchase_followup broadcast after this
+            limit: max results
+        """
+        cur = await self._db.execute(
+            """
+            SELECT u.phone
+            FROM users u
+            WHERE u.status NOT IN ('churned', 'opted_out')
+              AND json_array_length(u.products_purchased) > 0
+              AND u.phone NOT IN (
+                  SELECT phone FROM user_broadcasts
+                  WHERE condition_code = 'purchase_followup'
+                    AND sent_at > ?
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM messages m
+                  WHERE m.phone = u.phone
+                    AND m.at > ?
+              )
+            ORDER BY u.updated_at ASC
+            LIMIT ?
+            """,
+            (followup_cutoff, activity_cutoff, limit),
+        )
+        rows = await cur.fetchall()
+        return [row["phone"] for row in rows]
+
     async def _load_appointments(self, phone: str) -> list[AppointmentRecord]:
         cur = await self._db.execute(
             """
