@@ -22,6 +22,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from src.llm import DEFAULT_MODEL
+
 if TYPE_CHECKING:
     from src.crm.models import User
     from src.broadcaster.weather_service import WeatherCondition
@@ -147,7 +149,7 @@ async def compose_broadcast(
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
@@ -257,7 +259,7 @@ async def compose_purchase_followup(
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
@@ -339,7 +341,7 @@ async def compose_solar_term_tip(
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
@@ -397,7 +399,7 @@ async def compose_constitution_recheck(
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
@@ -545,7 +547,7 @@ async def compose_weekly_tea_tip(llm: object, user: "User") -> list[str]:
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
@@ -631,7 +633,7 @@ async def compose_weekly_acupressure_tip(llm: object, user: "User") -> list[str]
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
@@ -712,7 +714,7 @@ async def compose_appointment_prep(llm: object, user: "User") -> list[str]:
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
@@ -791,7 +793,7 @@ async def compose_monthly_food_tip(llm: object, user: "User", month: int) -> lis
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
@@ -889,7 +891,7 @@ async def compose_weekly_sleep_tip(llm: object, user: "User") -> list[str]:
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],

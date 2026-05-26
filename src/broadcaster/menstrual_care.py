@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.crm.models import User
 
+from src.llm import DEFAULT_MODEL
 from src.whatsapp import client as wa_client
 from src.whatsapp.blocklist import is_blocked
 
@@ -180,7 +181,7 @@ async def compose_menstrual_care_tip(
 
     try:
         response = await llm.messages.create(
-            model="gpt-4o-mini",
+            model=DEFAULT_MODEL,
             max_tokens=300,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],

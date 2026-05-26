@@ -1,9 +1,15 @@
-"""Voice note transcription via OpenAI Whisper.
+"""Voice note transcription via OpenAI Whisper-class models.
 
 WhatsApp voice notes arrive as opus/ogg blobs. We decrypt them via
 ChatDaddy's transcoder (handled in `src.whatsapp.media.download_media`)
-then push the bytes through Whisper (gpt-4o-mini-transcribe by default
-— cheaper than whisper-1, comparable quality for Cantonese / 廣東話).
+then push the bytes through OpenAI audio transcription API.
+
+Model history (this file):
+  - whisper-1                  (legacy, ~$0.006/min)
+  - gpt-4o-mini-transcribe     (cheap, but **retires 2026-06-01**)
+  - gpt-4o-transcribe          (current default, replaces mini-transcribe)
+                                — comparable quality for Cantonese / 廣東話,
+                                  modest price increase, future-proof
 """
 
 from __future__ import annotations
@@ -16,8 +22,11 @@ from openai import AsyncOpenAI
 
 logger = logging.getLogger("llm_transcribe")
 
+# Migration 2026-05-26: gpt-4o-mini-transcribe retires 2026-06-01.
+# gpt-4o-transcribe is the recommended replacement (no mini-tier
+# successor in the new generation). Override via env if needed.
 DEFAULT_TRANSCRIBE_MODEL = os.environ.get(
-    "OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe"
+    "OPENAI_TRANSCRIBE_MODEL", "gpt-4o-transcribe"
 )
 
 # Cantonese hint — Whisper supports ISO-639-1 codes. "yue" isn't on the

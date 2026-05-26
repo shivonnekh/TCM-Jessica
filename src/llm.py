@@ -30,12 +30,27 @@ from openai import AsyncOpenAI
 
 logger = logging.getLogger("llm")
 
-DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-# Higher-quality model used for components where reasoning + tone quality
-# matter most. As of 2026-05-26: Planner (routing logic), vision tasks
-# (Constitution + TongueProgress).
-PLANNER_MODEL = os.environ.get("OPENAI_PLANNER_MODEL", "gpt-4o")
-VISION_MODEL = os.environ.get("OPENAI_VISION_MODEL", "gpt-4o")
+# Model selection (Phase 1 migration 2026-05-26):
+#   - gpt-4o-mini deprecated Feb 2026 → migrated to gpt-5.4-mini
+#   - gpt-4o legacy/grandfathered → migrated to gpt-5.4-mini (vision-capable)
+#   - All roles now run on gpt-5.4-mini except cheap specialists which
+#     can drop to gpt-5.4-nano via OPENAI_NANO_MODEL override.
+#
+# Why all-mini: HK Cantonese quality is determined more by prompts +
+# few-shots than by the GPT-5.4 sub-tier. Mini is the proven sweet spot
+# for our budget (500 users target → ~$50-100/mo total).
+DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
+# Planner gets the same tier — routing decisions are reliable on mini
+# with our structured JSON output schema.
+PLANNER_MODEL = os.environ.get("OPENAI_PLANNER_MODEL", "gpt-5.4-mini")
+# Vision: gpt-5.4-mini is vision-capable and ~60% cheaper than gpt-4o.
+# Tongue 舌診 calls are low volume (~4 per user lifetime) so cost is
+# negligible regardless; mini is fine for routine analysis.
+VISION_MODEL = os.environ.get("OPENAI_VISION_MODEL", "gpt-5.4-mini")
+# Cheaper tier for high-frequency, low-stakes specialist calls
+# (greeting boilerplate, casual chit-chat). Off by default; opt in by
+# setting OPENAI_NANO_MODEL=gpt-5.4-nano.
+NANO_MODEL = os.environ.get("OPENAI_NANO_MODEL", DEFAULT_MODEL)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -164,7 +179,8 @@ def _translate_block(block: dict[str, Any]) -> dict[str, Any]:
 
 
 def _coerce_model(name: str | None) -> str:
-    """Map Anthropic-style names → OpenAI model. Default to gpt-4o-mini."""
+    """Map Anthropic-style names → OpenAI model. Default to DEFAULT_MODEL
+    (currently gpt-5.4-mini, see top of file)."""
     if not name:
         return DEFAULT_MODEL
     if name.startswith(("gpt-", "o1", "o3", "o4")):

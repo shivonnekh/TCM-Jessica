@@ -28,12 +28,11 @@ import logging
 from typing import Any
 
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
-from src.llm import LLMClient
+from src.llm import DEFAULT_MODEL, LLMClient
 from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.casual")
 
-DEFAULT_MODEL = "gpt-4o-mini"
 
 _SYSTEM = """你係 Jessica 嘅 Casual Talk Specialist —— 處理朋友式對話。
 唔涉及醫療診斷、唔推產品、唔做預約 — 純粹係 emotional + lifestyle layer，

@@ -29,7 +29,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from src.llm import LLMClient
+from src.llm import DEFAULT_MODEL, LLMClient
 
 from src.agents.base import (
     SpecialistInput,
@@ -41,7 +41,6 @@ from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.greeting")
 
-DEFAULT_MODEL = "gpt-4o-mini"  # cheap — Greeting doesn't need Sonnet
 
 # Greetings JSON — official intro lives here, hot-reloaded on every read so
 # editing the file in prod doesn't require a redeploy.

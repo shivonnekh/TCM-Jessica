@@ -26,7 +26,7 @@ import json
 import logging
 from typing import Any
 
-from src.llm import LLMClient
+from src.llm import DEFAULT_MODEL, LLMClient
 
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
 from src.crm.models import Constitution
@@ -38,7 +38,6 @@ from src.tools.recipe_extractor import RecipeExtractor, recipe_to_dict
 
 logger = logging.getLogger("agents.faq")
 
-DEFAULT_MODEL = "gpt-4o-mini"
 MAX_FACTS = 5
 
 _SYSTEM = """你係 Jessica 嘅 FAQ Specialist —— 從 TCM 知識卡片入面抽取相關 facts 比 Writer 用。

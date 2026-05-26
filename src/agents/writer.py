@@ -22,7 +22,7 @@ import logging
 import re
 from typing import Any
 
-from src.llm import LLMClient
+from src.llm import DEFAULT_MODEL, LLMClient
 
 from src.agents.base import (
     PlannerDecision,
@@ -35,7 +35,6 @@ from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.writer")
 
-DEFAULT_MODEL = "gpt-4o-mini"
 MAX_BUBBLES = 5
 
 

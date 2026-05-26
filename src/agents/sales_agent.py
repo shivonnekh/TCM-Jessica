@@ -44,7 +44,7 @@ import os
 import re
 from typing import Any
 
-from src.llm import LLMClient
+from src.llm import DEFAULT_MODEL, LLMClient
 
 from src.agents.base import SpecialistInput, SpecialistName, SpecialistOutput
 from src.crm.models import Promotion
@@ -55,7 +55,6 @@ from src.tools.promotions import PromotionsLoader
 
 logger = logging.getLogger("agents.sales")
 
-DEFAULT_MODEL = "gpt-4o-mini"
 MAX_PRODUCTS_PER_TURN = 3
 MIN_CANDIDATES_TO_INVOKE_LLM = 1
 
