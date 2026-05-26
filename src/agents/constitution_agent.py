@@ -34,7 +34,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from src.llm import LLMClient
+from src.llm import LLMClient, VISION_MODEL
 
 from src.agents.base import (
     SpecialistInput,
@@ -51,7 +51,8 @@ from src.tools.recipe_extractor import RecipeExtractor, recipe_to_dict
 
 logger = logging.getLogger("agents.constitution")
 
-DEFAULT_MODEL = "gpt-4o-mini"  # vision quality matters
+# Tongue vision quality matters → use the higher-tier model (gpt-4o by default).
+DEFAULT_MODEL = VISION_MODEL
 MAX_MCQ = 4
 
 # temp_state namespacing — all keys live under "constitution_*" so other

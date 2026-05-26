@@ -31,6 +31,11 @@ from openai import AsyncOpenAI
 logger = logging.getLogger("llm")
 
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+# Higher-quality model used for components where reasoning + tone quality
+# matter most. As of 2026-05-26: Planner (routing logic), vision tasks
+# (Constitution + TongueProgress).
+PLANNER_MODEL = os.environ.get("OPENAI_PLANNER_MODEL", "gpt-4o")
+VISION_MODEL = os.environ.get("OPENAI_VISION_MODEL", "gpt-4o")
 
 
 # ──────────────────────────────────────────────────────────────────

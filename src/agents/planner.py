@@ -28,7 +28,7 @@ import json
 import logging
 from typing import Any
 
-from src.llm import LLMClient
+from src.llm import LLMClient, PLANNER_MODEL
 
 from src.agents.base import (
     SPECIALIST_CATALOG,
@@ -43,7 +43,9 @@ from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.planner")
 
-DEFAULT_MODEL = "gpt-4o-mini"
+# Planner uses the higher-tier model (gpt-4o by default) — routing decisions
+# benefit materially from better reasoning, even though it costs ~3-5x more.
+DEFAULT_MODEL = PLANNER_MODEL
 
 
 # -------------------------------------------------------------------
@@ -524,15 +526,24 @@ _FAREWELL_TOKENS = frozenset({
 
 
 def _is_farewell(text: str) -> bool:
-    """Return True if the message looks like a goodbye / sign-off."""
+    """Return True if the message looks like a goodbye / sign-off.
+
+    Heuristic (post-launch fix 2026-05-26):
+      - Empty / question marks → False (can't be a wrap-up)
+      - Exact token match → True
+      - Token appears in the TAIL (last 12 chars) of the message → True
+        Sign-offs sit at the end. Embedded mentions (e.g. "我唔係想再見你")
+        sit in the middle and are correctly rejected.
+    """
     lower = text.lower().strip()
-    # Exact match on the full message
+    if not lower:
+        return False
+    if "?" in lower or "？" in lower:
+        return False
     if lower in _FAREWELL_TOKENS:
         return True
-    # For short messages (≤15 chars), check if ANY farewell token is present
-    if len(lower) <= 15:
-        return any(tok in lower for tok in _FAREWELL_TOKENS)
-    return False
+    tail = lower[-12:]
+    return any(tok in tail for tok in _FAREWELL_TOKENS)
 
 
 def _build_closing_notes(user: User) -> str:
