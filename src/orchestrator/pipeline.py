@@ -69,6 +69,7 @@ class JessicaPipeline:
         writer: WriterAgent | None = None,
     ) -> None:
         self._crm = crm
+        self._client = client  # kept for memory consolidator
         self._trace_writer = trace_writer
         self._planner = planner or PlannerAgent(client)
         self._writer_agent = writer or WriterAgent(client)
@@ -186,6 +187,13 @@ class JessicaPipeline:
             )
 
             await self._crm.save_user(user_after)
+
+            # Memory consolidation — fire-and-forget background task.
+            # Runs every ~15 new messages; summarises history beyond the
+            # rolling window into user.notes. Zero latency impact on this turn.
+            asyncio.create_task(
+                _maybe_consolidate(self._crm, self._client, user_after)
+            )
 
             # New appointments live in a separate table — save_user
             # doesn't touch it. Detect appointments that appeared via
@@ -492,3 +500,15 @@ def _diff_user(before: User, after: User) -> dict[str, Any]:
     b = before.model_dump(mode="json")
     a = after.model_dump(mode="json")
     return {k: {"before": b[k], "after": a[k]} for k in a if a[k] != b.get(k)}
+
+
+async def _maybe_consolidate(crm: Any, client: Any, user: User) -> None:
+    """Background task: consolidate memory if enough new messages have accumulated."""
+    try:
+        from src.agents.memory_consolidator import consolidate_memory, should_consolidate
+
+        if await should_consolidate(crm, user):
+            await consolidate_memory(crm, client, user)
+    except Exception as exc:  # noqa: BLE001
+        # Never crash the server over a background memory task.
+        logger.warning("memory consolidation failed for %s: %s", user.phone[-4:], exc)

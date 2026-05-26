@@ -327,6 +327,60 @@ class CRMRepoPG:
         return [row["phone"] for row in rows]
 
 
+    async def get_message_count(self, phone: str) -> int:
+        """Total number of stored messages for this user (all time)."""
+        async with self._pool.acquire() as conn:
+            val = await conn.fetchval(
+                "SELECT COUNT(*) FROM messages WHERE phone = $1", phone
+            )
+        return int(val or 0)
+
+    async def get_messages_since(
+        self,
+        phone: str,
+        *,
+        since: datetime | None = None,
+        limit: int = 60,
+    ) -> list[ConversationMessage]:
+        """Load messages newer than ``since`` (all time if None), oldest-first."""
+        async with self._pool.acquire() as conn:
+            if since is not None:
+                rows = await conn.fetch(
+                    """
+                    SELECT role, content, media_urls, wa_message_id, turn_id, at
+                    FROM messages
+                    WHERE phone = $1 AND at > $2
+                    ORDER BY at ASC
+                    LIMIT $3
+                    """,
+                    phone,
+                    since.isoformat(),
+                    limit,
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT role, content, media_urls, wa_message_id, turn_id, at
+                    FROM messages
+                    WHERE phone = $1
+                    ORDER BY at ASC
+                    LIMIT $2
+                    """,
+                    phone,
+                    limit,
+                )
+        return [
+            ConversationMessage(
+                role=r["role"],
+                content=r["content"],
+                media_urls=json.loads(r["media_urls"] or "[]"),
+                wa_message_id=r["wa_message_id"],
+                turn_id=r["turn_id"],
+                at=datetime.fromisoformat(r["at"]),
+            )
+            for r in rows
+        ]
+
     async def list_phones_for_upcoming_appointments(
         self,
         within_hours: int = 48,

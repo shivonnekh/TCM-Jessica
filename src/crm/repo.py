@@ -381,6 +381,57 @@ class CRMRepo:
         rows = await cur.fetchall()
         return [row["phone"] for row in rows]
 
+    async def get_message_count(self, phone: str) -> int:
+        """Total number of stored messages for this user (all time)."""
+        cur = await self._db.execute(
+            "SELECT COUNT(*) AS cnt FROM messages WHERE phone = ?", (phone,)
+        )
+        row = await cur.fetchone()
+        return int(row["cnt"]) if row else 0
+
+    async def get_messages_since(
+        self,
+        phone: str,
+        *,
+        since: datetime | None = None,
+        limit: int = 60,
+    ) -> list[ConversationMessage]:
+        """Load messages newer than ``since`` (all time if None), oldest-first."""
+        if since is not None:
+            cur = await self._db.execute(
+                """
+                SELECT role, content, media_urls, wa_message_id, turn_id, at
+                FROM messages
+                WHERE phone = ? AND at > ?
+                ORDER BY at ASC
+                LIMIT ?
+                """,
+                (phone, since.isoformat(), limit),
+            )
+        else:
+            cur = await self._db.execute(
+                """
+                SELECT role, content, media_urls, wa_message_id, turn_id, at
+                FROM messages
+                WHERE phone = ?
+                ORDER BY at ASC
+                LIMIT ?
+                """,
+                (phone, limit),
+            )
+        rows = await cur.fetchall()
+        return [
+            ConversationMessage(
+                role=r["role"],
+                content=r["content"],
+                media_urls=json.loads(r["media_urls"] or "[]"),
+                wa_message_id=r["wa_message_id"],
+                turn_id=r["turn_id"],
+                at=datetime.fromisoformat(r["at"]),
+            )
+            for r in rows
+        ]
+
     async def _load_appointments(self, phone: str) -> list[AppointmentRecord]:
         cur = await self._db.execute(
             """
