@@ -347,37 +347,36 @@ def _rule_overrides(
             notes_for_writer=_build_returning_hint(user),
         )
 
-    # ── 急救穴位 reactive — acute pain detection ────────────────────────
-    # Fires for "我頭好痛 😭" type messages — user is in distress AND has
-    # a recognised symptom. Route to FAQ + CASUAL so we lead with empathy
-    # + immediate 30-second acupoint relief. Stays out of the way for
-    # casual mentions like "我有頭痛問題" (no acute signal).
-    from src.agents.acute_pain import detect_acute_pain  # noqa: PLC0415
+    # ── Health complaint shortcut — deterministic route to FAQ + CASUAL ─
+    # Catches the common pain / discomfort keywords ("頭痛", "失眠", ...)
+    # and ensures they reach the FAQ specialist. FAQ does the real work:
+    # vector-searches KB cards (tcm_acupressure_pain.json etc.), and the
+    # AcupointImageMap auto-attaches the matching acupoint image / video.
+    #
+    # Gate: only for returning users (status != NEW or has history).
+    # Pure first-touch users still flow through GREETING + CONSTITUTION
+    # onboarding — that's the structured clinic intake flow.
+    #
+    # We deliberately DO NOT hardcode acupoint mappings here anymore —
+    # that data belongs in the KB cards so the clinic team owns it.
+    from src.agents.acute_pain import detect_health_complaint  # noqa: PLC0415
 
-    acute = detect_acute_pain(user_message)
-    if acute is not None:
-        backup_line = (
-            f"後備穴位：{acute.backup_acupoint_zh}（如果第一個按完未夠）"
-            if acute.backup_acupoint_zh else ""
-        )
+    is_returning_user = (
+        bool(user.conversation_history) or user.status != UserStatus.NEW
+    )
+    complaint = detect_health_complaint(user_message)
+    if complaint is not None and is_returning_user:
         return PlannerDecision(
-            specialists=[SpecialistName.CASUAL, SpecialistName.FAQ],
+            specialists=[SpecialistName.FAQ, SpecialistName.CASUAL],
             mode="parallel",
-            reasoning=f"rule: 急救 — acute {acute.symptom_zh} detected",
+            reasoning=f"rule: health complaint '{complaint}' → FAQ KB lookup",
             notes_for_writer=(
-                f"【急救穴位 — 即刻緩解】\n\n"
-                f"用戶有急性「{acute.symptom_zh}」，宜先 give relief 而唔係解釋原因。\n\n"
-                f"主穴：{acute.primary_acupoint_zh}\n"
-                f"位置：{acute.location_zh}\n"
-                f"按法：{acute.press_instruction_zh}\n"
-                f"中醫角度：{acute.tcm_rationale_zh}\n"
-                f"{backup_line}\n\n"
-                f"Writer 嘅 3-bubble 順序：\n"
-                f"1. 短共情（一句，例：「咁辛苦😭」）\n"
-                f"2. 即刻畀解決方法 — 穴位位置 + 按法（用清晰嘅指引，唔好過長）\n"
-                f"3. 簡短中醫詮釋 + 問一句跟進「按完點啊？」\n\n"
-                f"FAQ Agent 會搵相關 KB cards 同自動 attach 穴位相 / 影片。\n"
-                f"唔好喺呢一 turn pitch 產品 — 純關心。"
+                f"用戶提到「{complaint}」。FAQ Agent 會由 KB 搵相關建議"
+                "（穴位、食療、舒緩方法），並自動 attach 穴位圖／影片。\n\n"
+                "Writer：用 FAQ payload 入面嘅 answer_facts + acupoint_images "
+                "作為主體內容。CASUAL 提供共情語氣。"
+                "唔好作 generic 建議（例如「飲多啲熱水」）— 用 KB 提供嘅具體方法。"
+                "唔好喺呢一 turn pitch 產品 — 純關心。"
             ),
         )
 

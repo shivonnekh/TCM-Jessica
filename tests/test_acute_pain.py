@@ -1,4 +1,11 @@
-"""Tests for acute pain detection + planner routing."""
+"""Tests for the health-complaint shortcut + planner routing.
+
+Architecture (post-rewrite 2026-05-26):
+    detect_health_complaint just returns a canonical symptom name (or None).
+    All acupoint content, image / video attach, and tone calibration happen
+    downstream — KB vector search via FAQ agent + AcupointImageMap. There
+    is intentionally NO hardcoded symptom→acupoint mapping in Python.
+"""
 
 from __future__ import annotations
 
@@ -6,77 +13,65 @@ from datetime import datetime
 
 import pytest
 
-from src.agents.acute_pain import AcuteRelief, detect_acute_pain
+from src.agents.acute_pain import detect_health_complaint
 from src.agents.base import SpecialistName
 from src.agents.planner import _rule_overrides
 from src.crm.models import ConversationMessage, User, UserStatus
 
 
 # ---------------------------------------------------------------------------
-# detect_acute_pain — pure unit tests
+# detect_health_complaint — pure unit tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "text,expected_symptom",
+    "text,expected",
     [
-        ("我頭好痛 😭", "頭痛"),
-        ("頭痛到頂唔順", "頭痛"),
-        ("偏頭痛勁痛", "頭痛"),
+        ("我頭痛", "頭痛"),
+        ("頭好痛", "頭痛"),
+        ("我头疼", "頭痛"),
         ("經痛好辛苦", "經痛"),
-        ("M痛勁", "經痛"),
-        ("失眠頂唔順", "失眠"),
-        ("肩頸痛痛到", "肩頸痛"),
-        ("頭暈到天旋地轉", "頭暈眩"),
-        ("鼻塞辛苦死", "鼻塞"),
-        ("腰好痛幫吓我", "腰痛"),
+        ("月經痛", "經痛"),
+        ("月经痛", "經痛"),
+        ("失眠", "失眠"),
+        ("睡不着", "失眠"),
+        ("肩頸痛", "肩頸痛"),
+        ("腰痛", "腰痛"),
+        ("眼攰", "眼睛疲勞"),
+        ("鼻塞", "鼻塞"),
+        ("頭暈到天旋地轉", "頭暈"),
+        ("心煩胸悶", "心煩胸悶"),
+        ("好攰冇精神", "疲勞"),
     ],
 )
-def test_acute_pain_detects_distress_with_symptom(text: str, expected_symptom: str) -> None:
-    relief = detect_acute_pain(text)
-    assert relief is not None
-    assert relief.symptom_zh == expected_symptom
+def test_detect_returns_canonical_symptom(text: str, expected: str) -> None:
+    assert detect_health_complaint(text) == expected
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        "我有頭痛問題",          # symptom but no urgency signal
-        "我以前試過經痛",        # past tense, not urgent now
-        "鼻塞咁多年都係咁",      # chronic, not acute
-        "我想問下湯水",           # no symptom
-        "你好啊",                  # greeting
-        "",                        # empty
+        "",
+        "你好",
+        "我想問下湯水",
+        "邊度有得買",
+        "predict 我嘅體質",
     ],
 )
-def test_acute_pain_returns_none_for_non_urgent(text: str) -> None:
-    assert detect_acute_pain(text) is None
+def test_detect_returns_none_for_non_complaints(text: str) -> None:
+    assert detect_health_complaint(text) is None
 
 
-def test_acute_pain_emoji_alone_is_a_signal() -> None:
-    """Emojis like 😭 / 🤕 count as urgency."""
-    relief = detect_acute_pain("頭痛 🤕")
-    assert relief is not None
-    assert relief.symptom_zh == "頭痛"
-
-
-def test_acute_pain_returns_known_acupoint() -> None:
-    """All mapped acupoints exist in the acupoint index — image attach works."""
-    relief = detect_acute_pain("我頭好痛 😭")
-    assert relief is not None
-    assert relief.primary_acupoint_zh == "合谷穴"
-    assert relief.location_zh  # non-empty
-    assert relief.press_instruction_zh
-    assert relief.tcm_rationale_zh
-
-
-def test_acute_pain_distress_without_symptom_returns_none() -> None:
-    """Urgency without a known symptom → fall through to normal flow."""
-    assert detect_acute_pain("好辛苦 😭") is None
+def test_detect_first_match_wins() -> None:
+    """Multi-symptom message returns the FIRST canonical match in the
+    keyword table — Planner just needs a single signal to route, the
+    Planner LLM's extracted_pain_points captures the full set."""
+    result = detect_health_complaint("我頭痛同時又失眠")
+    assert result in {"頭痛", "失眠"}
 
 
 # ---------------------------------------------------------------------------
-# Planner rule integration
+# Planner routing — health complaint → FAQ + CASUAL
 # ---------------------------------------------------------------------------
 
 
@@ -89,67 +84,88 @@ def _user_with_history(**kwargs) -> User:
     return User(phone="+85291234567", conversation_history=history, **kwargs)
 
 
-def test_acute_pain_routes_to_casual_and_faq_in_parallel() -> None:
-    decision = _rule_overrides(_user(), "我頭好痛 😭", [])
+def test_health_complaint_routes_to_faq_and_casual() -> None:
+    """Returning user with pain → FAQ (KB content) + CASUAL (empathy)."""
+    decision = _rule_overrides(_user_with_history(), "我頭痛", [])
 
     assert decision is not None
-    assert set(decision.specialists) == {SpecialistName.CASUAL, SpecialistName.FAQ}
+    assert set(decision.specialists) == {SpecialistName.FAQ, SpecialistName.CASUAL}
     assert decision.mode == "parallel"
-    assert "急救" in decision.reasoning or "acute" in decision.reasoning.lower()
 
 
-def test_acute_pain_notes_include_acupoint_instruction() -> None:
-    decision = _rule_overrides(_user(), "頭痛到頂唔順", [])
+def test_health_complaint_works_for_simplified_chinese() -> None:
+    """Production bug fix: 我头疼 (Simplified) must trigger same as 我頭痛."""
+    decision = _rule_overrides(_user_with_history(), "我头疼", [])
 
+    assert decision is not None
+    assert SpecialistName.FAQ in decision.specialists
+
+
+def test_health_complaint_works_without_urgency_signal() -> None:
+    """Plain "我頭痛" (no 好/勁/痛到/emoji) STILL fires for returning users —
+    production fix. Old behavior gated on urgency tokens and missed routine
+    mentions."""
+    decision = _rule_overrides(_user_with_history(), "我頭痛", [])
+    assert decision is not None
+    assert SpecialistName.FAQ in decision.specialists
+
+
+def test_health_complaint_notes_warn_against_generic_advice() -> None:
+    """The notes_for_writer must instruct against generic advice like
+    '飲多啲熱水' — the actual production failure mode we're fixing."""
+    decision = _rule_overrides(_user_with_history(), "頭痛", [])
+    assert decision is not None
+    assert "熱水" in decision.notes_for_writer  # the banned phrase
+    assert "KB" in decision.notes_for_writer  # must reference KB content
+
+
+def test_health_complaint_notes_do_NOT_hardcode_acupoint() -> None:
+    """notes_for_writer must NOT include specific acupoint names — that
+    info lives in KB cards. This test enforces the architecture."""
+    decision = _rule_overrides(_user_with_history(), "我頭痛", [])
     assert decision is not None
     notes = decision.notes_for_writer
-    assert "合谷穴" in notes
-    assert "虎口" in notes
-    assert "30 秒" in notes or "按壓" in notes
+    # No specific acupoint should be hardcoded in the planner notes
+    for hardcoded in ("合谷穴", "三陰交穴", "內關穴", "風池穴", "命門穴", "膻中穴"):
+        assert hardcoded not in notes, f"acupoint {hardcoded} leaked into planner notes"
 
 
-def test_acute_pain_for_period_pain_routes_to_sanyinjiao() -> None:
-    decision = _rule_overrides(_user(), "經痛好辛苦", [])
-
-    assert decision is not None
-    assert "三陰交" in decision.notes_for_writer
-
-
-def test_acute_pain_does_not_fire_for_chronic_mention() -> None:
-    """Non-acute symptom mention → planner falls through to LLM."""
-    decision = _rule_overrides(_user(), "我成日有頭痛問題", [])
-
-    # No acute signal → no acute pain rule → falls through
-    if decision is not None:
-        # Allowed: the LLM-bypass returns None OR returns a different rule
-        # (e.g. complaint_lite). Just verify it's NOT the acute pain rule.
-        assert "急救" not in decision.reasoning
-
-
-def test_acute_pain_fires_before_emotion_rule() -> None:
-    """'頭痛好辛苦 😭' could match both emotion + acute pain — acute wins."""
-    decision = _rule_overrides(_user_with_history(), "頭痛好辛苦 😭", [])
-
-    assert decision is not None
-    assert "急救" in decision.reasoning
-
-
-def test_acute_pain_fires_for_new_user_too() -> None:
-    """First-touch user with acute pain → still gets immediate relief, not onboarding."""
+def test_health_complaint_does_not_fire_for_pure_first_touch() -> None:
+    """Pure first-touch user (NEW + no history) with pain → fall through
+    to the existing GREETING + CONSTITUTION onboarding flow. The clinic's
+    structured intake takes priority for users we've never met."""
     decision = _rule_overrides(_user(status=UserStatus.NEW), "頭好痛幫吓我", [])
+    # The complaint rule must NOT fire — onboarding rule handles it instead
+    if decision is not None:
+        assert "health complaint" not in decision.reasoning
 
+
+def test_health_complaint_fires_for_returning_user() -> None:
+    """Returning user (has history) with pain → routes to FAQ + CASUAL."""
+    decision = _rule_overrides(_user_with_history(), "我頭痛", [])
     assert decision is not None
-    assert "急救" in decision.reasoning
-    # Critical: should NOT route to GREETING + CONSTITUTION (the existing
-    # first-touch-with-complaint rule), which delays relief.
-    assert SpecialistName.CONSTITUTION not in decision.specialists
+    assert SpecialistName.FAQ in decision.specialists
+    assert SpecialistName.CASUAL in decision.specialists
 
 
-def test_acute_pain_does_not_block_order_message() -> None:
-    """wa.me order message must always reach Sales, even if it contains pain words."""
-    # User clicks an order link AFTER saying they have pain — the order
-    # message itself is structured and gets priority.
+def test_health_complaint_does_not_block_order_message() -> None:
+    """wa.me order messages still take priority over complaint detection."""
     decision = _rule_overrides(_user(), "想訂【清心潤肺湯 HK$48】", [])
-
     assert decision is not None
     assert decision.specialists == [SpecialistName.SALES]
+
+
+def test_health_complaint_fires_before_emotion_rule() -> None:
+    """A complaint takes precedence over emotion detection."""
+    decision = _rule_overrides(_user_with_history(), "頭痛好辛苦 😭", [])
+    assert decision is not None
+    assert SpecialistName.FAQ in decision.specialists
+
+
+def test_no_complaint_message_falls_through() -> None:
+    """Non-complaint messages don't trigger the complaint rule."""
+    decision = _rule_overrides(_user(), "你好啊", [])
+    # Either no decision (falls through to LLM) or a different rule
+    # (e.g. greeting). But MUST NOT be the complaint rule.
+    if decision is not None:
+        assert "health complaint" not in decision.reasoning
