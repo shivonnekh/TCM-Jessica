@@ -205,6 +205,15 @@ class JessicaPipeline:
             for appt in new_appointments:
                 await self._crm.add_appointment(phone, appt)
 
+            # Same pattern for tongue_photos — added via _append diff by
+            # the TongueProgress specialist.
+            new_tongue_records = [
+                t for t in user_after.tongue_photos
+                if t not in user_for_planner.tongue_photos
+            ]
+            for record in new_tongue_records:
+                await self._crm.add_tongue_record(phone, record)
+
             bundle.crm_diff = _diff_user(user_for_planner, user_after)
 
         except Exception as exc:  # noqa: BLE001

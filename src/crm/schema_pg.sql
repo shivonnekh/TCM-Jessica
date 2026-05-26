@@ -58,6 +58,27 @@ CREATE TABLE IF NOT EXISTS appointments (
 CREATE INDEX IF NOT EXISTS idx_appointments_phone ON appointments(phone);
 CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
 
+-- Tongue diagnosis history — for progress tracking (舌診進度追蹤)
+CREATE TABLE IF NOT EXISTS tongue_photos (
+    id                   SERIAL PRIMARY KEY,
+    phone                TEXT NOT NULL,
+    photo_url            TEXT NOT NULL,
+    captured_at          TEXT NOT NULL,
+    tongue_colour        TEXT NOT NULL DEFAULT '',
+    coating_colour       TEXT NOT NULL DEFAULT '',
+    coating_thickness    TEXT NOT NULL DEFAULT '',
+    coating_moisture     TEXT NOT NULL DEFAULT '',
+    body_shape           TEXT NOT NULL DEFAULT '',
+    teeth_marks          BOOLEAN NOT NULL DEFAULT FALSE,
+    cracks               BOOLEAN NOT NULL DEFAULT FALSE,
+    raw_analysis         TEXT NOT NULL DEFAULT '',
+    constitution_at_time TEXT NOT NULL DEFAULT 'unknown',
+    FOREIGN KEY (phone) REFERENCES users(phone) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_tongue_photos_phone_captured
+    ON tongue_photos(phone, captured_at DESC);
+
 -- Proactive broadcast tracking — per-user weekly cap (max 2/week)
 CREATE TABLE IF NOT EXISTS user_broadcasts (
     id              SERIAL PRIMARY KEY,

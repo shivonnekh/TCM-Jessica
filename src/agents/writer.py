@@ -44,12 +44,13 @@ MAX_BUBBLES = 5
 # for the primary message. Lower-priority info becomes a side mention
 # only if it doesn't contradict the primary.
 SPECIALIST_PRIORITY: list[SpecialistName] = [
-    SpecialistName.CONSTITUTION,  # in-flow diagnostic — highest priority
-    SpecialistName.APPOINTMENT,   # active booking — concrete action
-    SpecialistName.SALES,         # pitch — drives revenue
-    SpecialistName.FAQ,           # educational — informational
-    SpecialistName.CASUAL,        # rapport, listens — below substantive
-    SpecialistName.GREETING,      # first-touch only — lowest
+    SpecialistName.CONSTITUTION,     # in-flow diagnostic — highest priority
+    SpecialistName.TONGUE_PROGRESS,  # before/after narrative for return users
+    SpecialistName.APPOINTMENT,      # active booking — concrete action
+    SpecialistName.SALES,            # pitch — drives revenue
+    SpecialistName.FAQ,              # educational — informational
+    SpecialistName.CASUAL,           # rapport, listens — below substantive
+    SpecialistName.GREETING,         # first-touch only — lowest
 ]
 
 

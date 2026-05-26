@@ -15,6 +15,7 @@ from src.agents.constitution_agent import ConstitutionAgent
 from src.agents.faq_agent import FAQAgent
 from src.agents.greeting_agent import GreetingAgent
 from src.agents.sales_agent import SalesAgent
+from src.agents.tongue_progress_agent import TongueProgressAgent
 from src.llm import LLMClient
 from src.tools.kb_search import KBSearch
 
@@ -39,4 +40,5 @@ def build_specialist_registry(
             client=client, kb_search=kb_search
         ),
         SpecialistName.APPOINTMENT: AppointmentAgent(),
+        SpecialistName.TONGUE_PROGRESS: TongueProgressAgent(client),
     }

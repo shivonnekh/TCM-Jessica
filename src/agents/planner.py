@@ -211,8 +211,25 @@ def _rule_overrides(
             ),
         )
 
-    # Tongue photo → constitution is mandatory
+    # Tongue photo handling:
+    #   - User has prior tongue history + known constitution → TONGUE_PROGRESS
+    #     (track improvement instead of re-diagnosing)
+    #   - First-time tongue OR unknown constitution → CONSTITUTION (existing flow)
     if media_urls:
+        if (
+            user.constitution != Constitution.UNKNOWN
+            and len(user.tongue_photos) >= 1
+        ):
+            return PlannerDecision(
+                specialists=[SpecialistName.TONGUE_PROGRESS],
+                mode="solo",
+                reasoning="rule: new tongue photo + prior history → progress tracking",
+                notes_for_writer=(
+                    "【舌診進度追蹤】Tongue Progress Agent 已分析新脷相 + 同上次比較。"
+                    "Writer 直接用 payload.narrative_zh 作為主體回覆，加自然開場。"
+                    "可以提到 changes 入面嘅具體變化。唔好突然 pitch 產品。"
+                ),
+            )
         if user.status in (UserStatus.NEW, UserStatus.QUALIFIED):
             return PlannerDecision(
                 specialists=[SpecialistName.CONSTITUTION],

@@ -22,6 +22,7 @@ from src.crm.models import (
     AppointmentRecord,
     Constitution,
     ConversationMessage,
+    TongueRecord,
     User,
     UserStatus,
 )
@@ -62,7 +63,8 @@ class CRMRepo:
 
         history = await self._load_history(phone, limit=history_window)
         appointments = await self._load_appointments(phone)
-        return _row_to_user(row, history, appointments)
+        tongue_photos = await self._load_tongue_photos(phone)
+        return _row_to_user(row, history, appointments, tongue_photos)
 
     async def get_or_create_user(self, phone: str) -> User:
         existing = await self.get_user(phone)
@@ -199,8 +201,65 @@ class CRMRepo:
         # But ensure no orphans if FKs are off.
         await self._db.execute("DELETE FROM messages WHERE phone = ?", (phone,))
         await self._db.execute("DELETE FROM appointments WHERE phone = ?", (phone,))
+        await self._db.execute("DELETE FROM tongue_photos WHERE phone = ?", (phone,))
         await self._db.commit()
         return {"users": user_count, "messages": msg_count, "appointments": appt_count}
+
+    async def add_tongue_record(self, phone: str, record: TongueRecord) -> None:
+        await self._db.execute(
+            """
+            INSERT INTO tongue_photos
+                (phone, photo_url, captured_at, tongue_colour, coating_colour,
+                 coating_thickness, coating_moisture, body_shape,
+                 teeth_marks, cracks, raw_analysis, constitution_at_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                phone,
+                record.photo_url,
+                record.captured_at.isoformat(),
+                record.tongue_colour,
+                record.coating_colour,
+                record.coating_thickness,
+                record.coating_moisture,
+                record.body_shape,
+                int(record.teeth_marks),
+                int(record.cracks),
+                record.raw_analysis,
+                record.constitution_at_time,
+            ),
+        )
+        await self._db.commit()
+
+    async def _load_tongue_photos(self, phone: str) -> list[TongueRecord]:
+        cur = await self._db.execute(
+            """
+            SELECT photo_url, captured_at, tongue_colour, coating_colour,
+                   coating_thickness, coating_moisture, body_shape,
+                   teeth_marks, cracks, raw_analysis, constitution_at_time
+            FROM tongue_photos
+            WHERE phone = ?
+            ORDER BY captured_at ASC
+            """,
+            (phone,),
+        )
+        rows = await cur.fetchall()
+        return [
+            TongueRecord(
+                photo_url=r["photo_url"],
+                captured_at=datetime.fromisoformat(r["captured_at"]),
+                tongue_colour=r["tongue_colour"] or "",
+                coating_colour=r["coating_colour"] or "",
+                coating_thickness=r["coating_thickness"] or "",
+                coating_moisture=r["coating_moisture"] or "",
+                body_shape=r["body_shape"] or "",
+                teeth_marks=bool(r["teeth_marks"]),
+                cracks=bool(r["cracks"]),
+                raw_analysis=r["raw_analysis"] or "",
+                constitution_at_time=r["constitution_at_time"] or "unknown",
+            )
+            for r in rows
+        ]
 
     async def add_appointment(self, phone: str, appt: AppointmentRecord) -> None:
         await self._db.execute(
@@ -465,6 +524,7 @@ def _row_to_user(
     row: aiosqlite.Row,
     history: list[ConversationMessage],
     appointments: list[AppointmentRecord],
+    tongue_photos: list[TongueRecord] | None = None,
 ) -> User:
     # Forward-compatible read: temp_state column may be missing in older
     # databases that haven't run the schema migration. Default to {}.
@@ -500,6 +560,7 @@ def _row_to_user(
         cycle_length_days=_try_int(row, "cycle_length_days", 28),
         conversation_history=history,
         appointments=appointments,
+        tongue_photos=tongue_photos or [],
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
     )

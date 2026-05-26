@@ -22,6 +22,7 @@ class SpecialistName(StrEnum):
     SALES = "sales"
     CONSTITUTION = "constitution"
     APPOINTMENT = "appointment"
+    TONGUE_PROGRESS = "tongue_progress"
 
 
 # -------------------------------------------------------------------
@@ -77,6 +78,12 @@ SPECIALIST_CATALOG: dict[SpecialistName, SpecialistMeta] = {
         one_liner_zh="用戶想預約、問診所地址、問視診",
         triggers_zh=("預約", "幾時可以", "診所喺邊", "可唔可以視診"),
         output_summary="phase (asking_mode/location/proposing/confirmed)",
+    ),
+    SpecialistName.TONGUE_PROGRESS: SpecialistMeta(
+        name=SpecialistName.TONGUE_PROGRESS,
+        one_liner_zh="用戶上載新脷相 + 已有歷史記錄 → 比較變化、報告進度",
+        triggers_zh=("脷相對比", "進度", "睇下我有冇改善"),
+        output_summary="phase + current_analysis + changes_vs_previous + narrative_zh",
     ),
 }
 

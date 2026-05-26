@@ -22,6 +22,7 @@ from src.crm.models import (
     AppointmentRecord,
     Constitution,
     ConversationMessage,
+    TongueRecord,
     User,
     UserStatus,
 )
@@ -72,7 +73,8 @@ class CRMRepoPG:
                 return None
             history = await _load_history(conn, phone, history_window)
             appointments = await _load_appointments(conn, phone)
-        return _row_to_user(row, history, appointments)
+            tongue_photos = await _load_tongue_photos(conn, phone)
+        return _row_to_user(row, history, appointments, tongue_photos)
 
     async def get_or_create_user(self, phone: str) -> User:
         existing = await self.get_user(phone)
@@ -184,11 +186,38 @@ class CRMRepoPG:
                 await conn.execute(
                     "DELETE FROM appointments WHERE phone = $1", phone
                 )
+                await conn.execute(
+                    "DELETE FROM tongue_photos WHERE phone = $1", phone
+                )
         return {
             "users": user_count or 0,
             "messages": msg_count or 0,
             "appointments": appt_count or 0,
         }
+
+    async def add_tongue_record(self, phone: str, record: TongueRecord) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO tongue_photos
+                    (phone, photo_url, captured_at, tongue_colour, coating_colour,
+                     coating_thickness, coating_moisture, body_shape,
+                     teeth_marks, cracks, raw_analysis, constitution_at_time)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                """,
+                phone,
+                record.photo_url,
+                record.captured_at.isoformat(),
+                record.tongue_colour,
+                record.coating_colour,
+                record.coating_thickness,
+                record.coating_moisture,
+                record.body_shape,
+                record.teeth_marks,
+                record.cracks,
+                record.raw_analysis,
+                record.constitution_at_time,
+            )
 
     async def add_appointment(self, phone: str, appt: AppointmentRecord) -> None:
         async with self._pool.acquire() as conn:
@@ -447,6 +476,38 @@ async def _load_history(
     return out
 
 
+async def _load_tongue_photos(
+    conn: asyncpg.Connection, phone: str
+) -> list[TongueRecord]:
+    rows = await conn.fetch(
+        """
+        SELECT photo_url, captured_at, tongue_colour, coating_colour,
+               coating_thickness, coating_moisture, body_shape,
+               teeth_marks, cracks, raw_analysis, constitution_at_time
+        FROM tongue_photos
+        WHERE phone = $1
+        ORDER BY captured_at ASC
+        """,
+        phone,
+    )
+    return [
+        TongueRecord(
+            photo_url=r["photo_url"],
+            captured_at=datetime.fromisoformat(r["captured_at"]),
+            tongue_colour=r["tongue_colour"] or "",
+            coating_colour=r["coating_colour"] or "",
+            coating_thickness=r["coating_thickness"] or "",
+            coating_moisture=r["coating_moisture"] or "",
+            body_shape=r["body_shape"] or "",
+            teeth_marks=bool(r["teeth_marks"]),
+            cracks=bool(r["cracks"]),
+            raw_analysis=r["raw_analysis"] or "",
+            constitution_at_time=r["constitution_at_time"] or "unknown",
+        )
+        for r in rows
+    ]
+
+
 async def _load_appointments(
     conn: asyncpg.Connection, phone: str
 ) -> list[AppointmentRecord]:
@@ -475,6 +536,7 @@ def _row_to_user(
     row: Any,
     history: list[ConversationMessage],
     appointments: list[AppointmentRecord],
+    tongue_photos: list[TongueRecord] | None = None,
 ) -> User:
     try:
         temp_state = json.loads(row["temp_state"] or "{}")
@@ -512,6 +574,7 @@ def _row_to_user(
         cycle_length_days=cycle_days,
         conversation_history=history,
         appointments=appointments,
+        tongue_photos=tongue_photos or [],
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
     )

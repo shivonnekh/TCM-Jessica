@@ -65,6 +65,31 @@ class AppointmentRecord(BaseModel):
     booked_at: datetime
 
 
+class TongueRecord(BaseModel):
+    """A single tongue photo + its vision-analysed findings.
+
+    Stored per-user, oldest→newest. The TongueProgress agent reads the
+    last record to generate before/after narratives for the user.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    photo_url: str
+    captured_at: datetime
+    # Structured findings (parsed from vision LLM output)
+    tongue_colour: str = ""          # 淡紅 / 紅 / 絳 / 淡白 / 紫
+    coating_colour: str = ""         # 白 / 黃 / 灰 / 黑
+    coating_thickness: str = ""      # 薄 / 厚 / 無苔
+    coating_moisture: str = ""       # 潤 / 燥 / 膩
+    body_shape: str = ""             # 正常 / 胖 / 瘦
+    teeth_marks: bool = False
+    cracks: bool = False
+    # Free-form analysis from vision LLM (fallback for narrative)
+    raw_analysis: str = ""
+    # Snapshot of user.constitution at upload time (for context)
+    constitution_at_time: str = "unknown"
+
+
 class Promotion(BaseModel):
     """Active offer surfaced by Sales/Appointment agents.
 
@@ -104,6 +129,7 @@ class User(BaseModel):
     products_pitched: list[str] = Field(default_factory=list)
     products_purchased: list[str] = Field(default_factory=list)
     appointments: list[AppointmentRecord] = Field(default_factory=list)
+    tongue_photos: list[TongueRecord] = Field(default_factory=list)
 
     # Menstrual cycle tracking (optional — female users only)
     last_period_start: date | None = None
