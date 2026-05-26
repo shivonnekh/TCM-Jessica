@@ -45,6 +45,10 @@ class CRMRepo:
         db = await aiosqlite.connect(str(db_path))
         db.row_factory = aiosqlite.Row
         await db.executescript(SCHEMA_PATH.read_text())
+        # Column migrations — SQLite doesn't support "ADD COLUMN IF NOT
+        # EXISTS", so we add only when missing. Idempotent and safe to
+        # re-run on every connect.
+        await _migrate_add_user_columns(db)
         await db.commit()
         return cls(db)
 
@@ -578,3 +582,26 @@ def _try_int(row: Any, key: str, default: int) -> int:
         return int(val) if val is not None else default
     except (IndexError, KeyError, TypeError, ValueError):
         return default
+
+
+# -------------------------------------------------------------------
+# Column migrations — SQLite has no "ADD COLUMN IF NOT EXISTS", so we
+# inspect PRAGMA table_info and ADD only when missing. Idempotent.
+# -------------------------------------------------------------------
+
+
+_USER_COLUMN_MIGRATIONS: tuple[tuple[str, str], ...] = (
+    # (column_name, ddl_fragment for ADD COLUMN)
+    ("last_period_start", "last_period_start TEXT"),
+    ("cycle_length_days", "cycle_length_days INTEGER NOT NULL DEFAULT 28"),
+)
+
+
+async def _migrate_add_user_columns(db: aiosqlite.Connection) -> None:
+    """Add new users-table columns if missing. Safe to run on every connect."""
+    cur = await db.execute("PRAGMA table_info(users)")
+    rows = await cur.fetchall()
+    existing = {r[1] for r in rows}  # column names
+    for col, ddl in _USER_COLUMN_MIGRATIONS:
+        if col not in existing:
+            await db.execute(f"ALTER TABLE users ADD COLUMN {ddl}")
