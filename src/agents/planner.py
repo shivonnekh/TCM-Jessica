@@ -400,20 +400,26 @@ def _rule_overrides(
         )
 
     # FUNNEL: user asks for soups again → pivot to paid pitch. We
-    # detect "repeat ask" from any of three signals:
+    # detect "repeat ask" from any of four signals:
     #   (a) temp_state.faq_recipes_shown_count >= 1
     #   (b) user message includes "再" / "more" / "其他" / "另外" — even
     #       first turn, the wording itself implies they want more
     #   (c) prior Jessica reply in last 4 turns mentioned a recipe title
     #       (e.g. healthy-food.hk free recipe — they're cycling back)
+    #   (d) user.status == CONSTITUTION_DONE — diagnosis is finished,
+    #       any soup ask now should pivot to the paid catalog. Constitution
+    #       agent already surfaced free recipes during the assessment, so
+    #       "介紹下湯水" / "湯水推介" at this point = pitch territory.
     if _wants_soup_list(user_message):
         shown_count = int((user.temp_state or {}).get("faq_recipes_shown_count", 0))
         wants_more = _wants_more(user_message)
         history_shows_recipes = _history_has_recipe_mention(user.conversation_history)
-        if shown_count >= 1 or wants_more or history_shows_recipes:
+        post_constitution = user.status == UserStatus.CONSTITUTION_DONE
+        if shown_count >= 1 or wants_more or history_shows_recipes or post_constitution:
             why = (
                 f"shown_count={shown_count}, wants_more={wants_more},"
-                f" history_recipe={history_shows_recipes}"
+                f" history_recipe={history_shows_recipes},"
+                f" post_constitution={post_constitution}"
             )
             return PlannerDecision(
                 specialists=[SpecialistName.SALES],
