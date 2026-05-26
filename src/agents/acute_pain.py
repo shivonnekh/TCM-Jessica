@@ -26,9 +26,10 @@ the most common keywords, at zero cost.
 from __future__ import annotations
 
 
-# Health-complaint keywords. Hits route deterministically to FAQ + CASUAL.
-# Bilingual (Traditional / Simplified) where forms differ. Generic terms
-# only — no urgency intensifiers; the LLM Planner handles nuance.
+# Health-complaint keywords for *routing*. Hits here route deterministically
+# to FAQ + CASUAL in the Planner. Bilingual (Traditional / Simplified) where
+# forms differ. Generic terms only — no urgency intensifiers; the LLM Planner
+# handles nuance.
 #
 # NOT included here (handled by dedicated rules elsewhere in the planner):
 #   - Skin conditions (皮膚痕 / 暗瘡 / 濕疹) → ointment pitch (Sales)
@@ -44,6 +45,21 @@ _COMPLAINT_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("頭暈",      ("頭暈", "暈眩", "天旋地轉", "头晕")),
     ("心煩胸悶",  ("心煩", "胸悶", "焗住", "唞唔到氣", "心翳")),
     ("疲勞",      ("好攰", "好累", "無精神", "无精神", "精神差", "成日攰")),
+)
+
+# Extra symptom keywords used ONLY for CRM extraction (pain_points memory),
+# never for routing. Skin/digestive complaints route elsewhere via dedicated
+# planner rules — but we still want to remember the user mentioned them.
+# Without this, a user who says "我皮膚痕" hits the skin-condition Sales
+# rule and the Planner LLM is bypassed → pain_points stays empty.
+_EXTRA_EXTRACTION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("皮膚痕癢",  ("皮膚痕", "皮肤痕", "皮肤痒", "痕癢", "痒")),
+    ("濕疹",      ("濕疹", "湿疹")),
+    ("暗瘡",      ("暗瘡", "暗疮", "痘痘", "生暗瘡")),
+    ("便秘",      ("便秘", "便便", "大便唔通")),
+    ("肚瀉",      ("肚瀉", "肚泻", "拉肚子", "屙")),
+    ("胃痛",      ("胃痛", "胃酸", "胃脹")),
+    ("月經唔順",  ("月經唔順", "月经不调", "月經不調", "月經亂")),
 )
 
 
@@ -62,3 +78,26 @@ def detect_health_complaint(text: str) -> str | None:
         if any(v in text for v in variants):
             return canonical
     return None
+
+
+def detect_all_health_complaints(text: str) -> list[str]:
+    """Return ALL canonical symptom names mentioned in the text.
+
+    Used by the pipeline as a fallback when the Planner LLM is bypassed
+    (rule fast-paths) so we still persist multi-symptom mentions to CRM.
+
+    Includes both routing-grade keywords (_COMPLAINT_KEYWORDS) and
+    extraction-only keywords (_EXTRA_EXTRACTION_KEYWORDS like skin
+    conditions, digestive complaints). Order preserves the canonical
+    table; duplicates are removed.
+    """
+    if not text:
+        return []
+    found: list[str] = []
+    for canonical, variants in _COMPLAINT_KEYWORDS:
+        if any(v in text for v in variants) and canonical not in found:
+            found.append(canonical)
+    for canonical, variants in _EXTRA_EXTRACTION_KEYWORDS:
+        if any(v in text for v in variants) and canonical not in found:
+            found.append(canonical)
+    return found

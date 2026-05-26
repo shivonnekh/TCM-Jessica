@@ -159,15 +159,17 @@ class JessicaPipeline:
             # show pain_points=[] (causing empty closing summaries).
             #
             # gpt-5.4-mini occasionally omits the field (dry-run trace
-            # 2026-05-26 showed inconsistent extraction). Fall back to the
-            # deterministic keyword detector so a routine "我頭痛" still
-            # gets persisted to CRM even if the LLM didn't tag it.
+            # 2026-05-26 showed inconsistent extraction). And when a rule
+            # fast-path fires (e.g. skin condition → Sales), the Planner LLM
+            # is bypassed entirely. In both cases fall back to the
+            # deterministic multi-keyword detector so a routine "我頭痛又失眠"
+            # still gets BOTH symptoms persisted to CRM.
             extracted: list[str] = list(decision.extracted_pain_points)
             if not extracted:
-                from src.agents.acute_pain import detect_health_complaint  # noqa: PLC0415
-                kw = detect_health_complaint(user_message)
-                if kw is not None:
-                    extracted = [kw]
+                from src.agents.acute_pain import (  # noqa: PLC0415
+                    detect_all_health_complaints,
+                )
+                extracted = detect_all_health_complaints(user_message)
 
             if extracted:
                 merged = list(user_after.pain_points)

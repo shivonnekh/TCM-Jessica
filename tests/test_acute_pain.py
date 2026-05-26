@@ -13,7 +13,10 @@ from datetime import datetime
 
 import pytest
 
-from src.agents.acute_pain import detect_health_complaint
+from src.agents.acute_pain import (
+    detect_all_health_complaints,
+    detect_health_complaint,
+)
 from src.agents.base import SpecialistName
 from src.agents.planner import _rule_overrides
 from src.crm.models import ConversationMessage, User, UserStatus
@@ -169,3 +172,61 @@ def test_no_complaint_message_falls_through() -> None:
     # (e.g. greeting). But MUST NOT be the complaint rule.
     if decision is not None:
         assert "health complaint" not in decision.reasoning
+
+
+# ---------------------------------------------------------------------------
+# detect_all_health_complaints — multi-symptom extraction fallback
+# ---------------------------------------------------------------------------
+
+
+def test_detect_all_returns_multiple_symptoms_single_turn() -> None:
+    """Single message mentioning multiple symptoms returns ALL of them."""
+    result = detect_all_health_complaints("我頭痛又失眠又腰痛")
+    assert set(result) == {"頭痛", "失眠", "腰痛"}
+
+
+def test_detect_all_extracts_skin_keywords_for_crm() -> None:
+    """Skin complaints route to Sales (not FAQ) so detect_health_complaint
+    intentionally returns None. But the pipeline still needs to remember
+    the symptom — detect_all_health_complaints covers extraction."""
+    assert detect_all_health_complaints("我皮膚痕") == ["皮膚痕癢"]
+    assert "濕疹" in detect_all_health_complaints("我有濕疹好辛苦")
+    assert "暗瘡" in detect_all_health_complaints("成日生暗瘡")
+
+
+def test_detect_all_simplified_chinese_multi_symptom() -> None:
+    """Simplified Chinese input with multiple symptoms still extracts all."""
+    result = detect_all_health_complaints("我头疼睡不着腰疼")
+    assert set(result) == {"頭痛", "失眠", "腰痛"}
+
+
+def test_detect_all_returns_empty_for_clean_messages() -> None:
+    assert detect_all_health_complaints("") == []
+    assert detect_all_health_complaints("你好") == []
+    assert detect_all_health_complaints("有咩湯水推介") == []
+
+
+def test_detect_all_is_deduped() -> None:
+    """Duplicate symptom mentions in one message are deduped."""
+    result = detect_all_health_complaints("頭痛 頭好痛 偏頭痛")
+    assert result == ["頭痛"]
+
+
+# ---------------------------------------------------------------------------
+# Emotion + health complaint interaction (empathy bypass fix)
+# ---------------------------------------------------------------------------
+
+
+def test_combined_emotion_and_fatigue_defers_to_emotion_rule() -> None:
+    """When a message has BOTH a complaint keyword (好攰 → 疲勞) AND an
+    emotion keyword (壓力 → 思/脾), the planner should defer to the
+    dedicated emotion rule so the Writer gets the 七情/臟腑 frame,
+    not the generic acupoint/KB frame."""
+    decision = _rule_overrides(_user_with_history(), "我好攰，最近壓力大", [])
+    assert decision is not None
+    # Both rules emit FAQ + CASUAL, but only the emotion rule embeds 情志
+    # framing in notes_for_writer.
+    notes = decision.notes_for_writer or ""
+    assert "情志" in notes or "七情" in notes or "傷" in notes, (
+        f"emotion frame missing from notes: {notes[:120]!r}"
+    )
