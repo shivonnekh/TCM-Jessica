@@ -276,6 +276,9 @@ def _rule_overrides(
     #   - User has prior tongue history + known constitution → TONGUE_PROGRESS
     #     (track improvement instead of re-diagnosing)
     #   - First-time tongue OR unknown constitution → CONSTITUTION (existing flow)
+    #   - Catch-all for any media upload → CONSTITUTION (defensive — never
+    #     let a tongue photo fall through to LLM planner, which has been
+    #     observed to mis-route to FAQ on unfamiliar status combos).
     if media_urls:
         if (
             user.constitution != Constitution.UNKNOWN
@@ -291,12 +294,15 @@ def _rule_overrides(
                     "可以提到 changes 入面嘅具體變化。唔好突然 pitch 產品。"
                 ),
             )
-        if user.status in (UserStatus.NEW, UserStatus.QUALIFIED):
-            return PlannerDecision(
-                specialists=[SpecialistName.CONSTITUTION],
-                mode="solo",
-                reasoning="rule: media present → constitution",
-            )
+        # Default for any other media-bearing turn — including
+        # status=CONSTITUTION_DONE with no tongue_photos (legacy users
+        # who completed assessment before the tongue_photos persistence
+        # fix shipped). Treat as a fresh re-diagnosis.
+        return PlannerDecision(
+            specialists=[SpecialistName.CONSTITUTION],
+            mode="solo",
+            reasoning="rule: media present → constitution",
+        )
 
     # User is mid-appointment confirmation → don't second-guess
     if user.temp_state.get("appointment_proposed"):
