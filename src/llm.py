@@ -115,13 +115,21 @@ class _Messages:
 
         # OpenAI's `model` field uses different names; agents pass things
         # like "claude-sonnet-4-5-...". Map any unknown model to the
-        # default (gpt-4o-mini) and log it.
+        # default and log it.
         effective_model = _coerce_model(model)
+
+        # Newer OpenAI families (gpt-5.x and o-series) reject `max_tokens`
+        # and require `max_completion_tokens`. Older gpt-4* models accept
+        # `max_tokens`. Pick the right kwarg per model family.
+        if _uses_max_completion_tokens(effective_model):
+            token_kwargs = {"max_completion_tokens": max_tokens}
+        else:
+            token_kwargs = {"max_tokens": max_tokens}
 
         resp = await self._c.chat.completions.create(
             model=effective_model,
-            max_tokens=max_tokens,
             messages=oai_messages,
+            **token_kwargs,
         )
 
         text = (resp.choices[0].message.content or "") if resp.choices else ""
@@ -188,3 +196,20 @@ def _coerce_model(name: str | None) -> str:
     if name.startswith("claude-"):
         return DEFAULT_MODEL
     return DEFAULT_MODEL
+
+
+def _uses_max_completion_tokens(model: str) -> bool:
+    """Return True if the model rejects `max_tokens` and requires the
+    new `max_completion_tokens` parameter.
+
+    Affected families:
+      - gpt-5.x (gpt-5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, ...)
+      - o-series (o1, o3, o4, including mini/preview variants)
+
+    Older gpt-4* models still accept `max_tokens` (and currently still
+    accept `max_completion_tokens` too — but we keep them on `max_tokens`
+    for backward compatibility).
+    """
+    if not model:
+        return False
+    return model.startswith(("gpt-5", "o1", "o3", "o4"))
