@@ -56,6 +56,9 @@ class CRMRepoPG:
             for stmt in _split_sql(schema_sql):
                 if stmt.strip():
                     await conn.execute(stmt)
+            # Code-level column migrations — see _migrate_pg_user_columns
+            # for why this can't live in the SQL schema file.
+            await _migrate_pg_user_columns(conn)
         logger.info("CRMRepoPG connected, schema applied")
         return cls(pool)
 
@@ -584,3 +587,34 @@ def _split_sql(s: str) -> list[str]:
     """Split a SQL script on semicolons, preserving multi-line statements."""
     # Naive splitter — fine for our schema which has no embedded semicolons.
     return [stmt.strip() + ";" for stmt in s.split(";") if stmt.strip()]
+
+
+# -------------------------------------------------------------------
+# Column migrations — PostgreSQL.
+#
+# Why this isn't pure SQL: asyncpg 0.31 + Python 3.14 hit a NoneType
+# decode bug in the simple-query protocol when running
+# ALTER TABLE ... ADD COLUMN IF NOT EXISTS (lost a prod deploy to it).
+# Doing the check + conditional ADD in Python avoids the protocol path
+# entirely. Idempotent and safe to re-run on every connect.
+# -------------------------------------------------------------------
+
+
+_PG_USER_COLUMN_MIGRATIONS: tuple[tuple[str, str], ...] = (
+    # (column_name, ddl_fragment for ADD COLUMN)
+    ("last_period_start", "last_period_start TEXT"),
+    ("cycle_length_days", "cycle_length_days INTEGER NOT NULL DEFAULT 28"),
+)
+
+
+async def _migrate_pg_user_columns(conn: asyncpg.Connection) -> None:
+    """Add new users-table columns if missing (PG version)."""
+    for col, ddl in _PG_USER_COLUMN_MIGRATIONS:
+        exists = await conn.fetchval(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'users' AND column_name = $1",
+            col,
+        )
+        if not exists:
+            await conn.execute(f"ALTER TABLE users ADD COLUMN {ddl}")
+            logger.info("PG migration: ADD COLUMN users.%s", col)

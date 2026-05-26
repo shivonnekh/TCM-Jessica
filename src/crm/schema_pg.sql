@@ -26,14 +26,12 @@ CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_constitution ON users(constitution);
 CREATE INDEX IF NOT EXISTS idx_users_updated_at ON users(updated_at);
 
--- ─────────────────────────────────────────────────────────────────────
--- Column migrations — CREATE TABLE IF NOT EXISTS above only creates new
--- tables; it does NOT add new columns to existing ones. ALTER TABLE
--- ADD COLUMN IF NOT EXISTS (PG 9.6+) is idempotent + safe to re-run on
--- every startup. Add new columns here when the model changes.
--- ─────────────────────────────────────────────────────────────────────
-ALTER TABLE users ADD COLUMN IF NOT EXISTS last_period_start TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS cycle_length_days INTEGER NOT NULL DEFAULT 28;
+-- Column migrations for existing tables: see _migrate_pg_user_columns()
+-- in repo_pg.py — done in Python because asyncpg 0.31 + Python 3.14
+-- chokes on ALTER TABLE ADD COLUMN IF NOT EXISTS (NoneType decode bug
+-- in simple-query protocol path). Code-level migration uses
+-- information_schema lookup + conditional ADD COLUMN — same effect,
+-- no protocol weirdness.
 
 CREATE TABLE IF NOT EXISTS messages (
     id              SERIAL PRIMARY KEY,
