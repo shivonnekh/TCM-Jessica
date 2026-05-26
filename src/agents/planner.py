@@ -107,17 +107,37 @@ A. **rephrased_query** — 將用戶訊息標準化成清晰嘅 HK 廣東話：
      "頭痛😭" → "頭痛😭"  （已 OK）
      "hi" → ""
 
-B. **extracted_pain_points** — 從用戶訊息（+ 上下文）抽取出嘅健康訴求：
-   - 一句一個短 tag（例：「月經痛」「失眠」「頭痛」「皮膚痕」）
-   - 用 HK 繁體標準寫法
-   - 只抽用戶**而家**正在訴說嘅問題，唔好抽 historical context
-   - 冇就返 []
+B. **extracted_pain_points** — 用戶嘅健康訴求 NER（多 tag 並存）：
+
+   要做：
+   1. 由今次嘅 user_message 抽出 **所有** 提到嘅 complaints
+      （一句多個 → 多 tag。例：「我頭痛又失眠又皮膚痕」→ 3 個 tags）
+   2. 同時掃 last 5 turns 嘅對話歷史，如果見到用戶 mention 過但
+      CRM `pain_points` 仲未有嘅 complaint，照樣加埋（catch-up）
+   3. CRM 已經有嘅 complaint 唔需要再 extract（Pipeline 會 dedup，
+      但你都唔好故意重出）
+
+   寫法：
+   - 一個短 tag = 一個複合 word/phrase
+   - HK 繁體標準形式（「月經痛」唔好寫「月经会痛」/「period pain」）
+   - 唔抽 generic emotion（「好攰」唔同「失眠」— 攰可能係多種原因）
+   - 唔抽否定式（「我以前頭痛宜家好咗」唔抽）
 
    例：
-     "我月经会痛，以前不会的" → ["月經痛"]
-     "頭痛仲有皮膚痕" → ["頭痛", "皮膚痕"]
-     "你好" → []
-     "邊度有湯飲" → []
+     msg=「我月经会痛，以前不会的」，CRM=[]
+       → ["月經痛"]
+
+     msg=「頭痛仲有皮膚痕」，CRM=[]
+       → ["頭痛", "皮膚痕"]
+
+     msg=「我都係上次嗰個問題」，CRM=["失眠"]，history 提過「失眠」
+       → []  （CRM 已有，唔重出）
+
+     msg=「我都失眠」，CRM=["頭痛"]，history 提過「腰痛」但 CRM 唔記得
+       → ["失眠", "腰痛"]  （current turn + history catch-up）
+
+     msg=「你好」 → []
+     msg=「邊度有湯飲」 → []
 
 呢兩個欄位嘅 output 會：
 - rephrased_query → 直接傳俾下游 specialist（FAQ KB search、Constitution、Sales）

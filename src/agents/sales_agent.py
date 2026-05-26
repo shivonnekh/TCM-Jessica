@@ -1138,7 +1138,15 @@ def _collect_offers(
 
 
 def _product_dict_simple(prod: Any) -> dict[str, Any]:
-    """Minimal product dict for re-shows (no pitch_angle_hint needed)."""
+    """Product dict shown to Writer — MUST include 功效 + image so the Writer
+    can render rich pitches (name + price + 功效 + 適合 + image), never bare
+    name + price.
+
+    Post-launch fix 2026-05-26: previously this returned only product_id /
+    name / price / image_url / purchase_url, which forced the Writer to
+    say "抗病毒湯 $88" with no context. Now: indications, constitution_match,
+    key_benefit, contraindications all surfaced.
+    """
     base = os.environ.get(
         "PUBLIC_BASE_URL", "https://tcm-jessica.onrender.com"
     ).rstrip("/")
@@ -1151,8 +1159,14 @@ def _product_dict_simple(prod: Any) -> dict[str, Any]:
         "product_id": prod.product_id,
         "name": prod.name,
         "price_hkd": prod.price_hkd,
+        "price_display": getattr(prod, "price_display", None) or f"HK${prod.price_hkd}",
         "image_url": image_url,
         "purchase_url": prod.purchase_url,
+        # ── Detail fields (REQUIRED for rich pitch) ─────────────────
+        "indications": list(prod.indications),                   # 功效 list
+        "constitution_match": list(prod.constitution_match),     # 適合體質
+        "key_benefit": prod.key_benefit or "",                   # one-liner
+        "contraindications": list(prod.contraindications),       # safety
     }
 
 
@@ -1200,14 +1214,27 @@ def _product_dict(
     match: ProductMatch, pitch_angles: dict[str, str]
 ) -> dict[str, Any]:
     p = match.product
+    base = os.environ.get(
+        "PUBLIC_BASE_URL", "https://tcm-jessica.onrender.com"
+    ).rstrip("/")
+    image_url = p.image_url or ""
+    if image_url and not image_url.startswith(("http://", "https://")):
+        rel = image_url[len("data/"):] if image_url.startswith("data/") else image_url
+        image_url = f"{base}/{rel}" if not rel.startswith("/") else f"{base}{rel}"
     return {
         "product_id": p.product_id,
         "name": p.name,
         "price_hkd": p.price_hkd,
-        "image_url": p.image_url,
+        "price_display": getattr(p, "price_display", None) or f"HK${p.price_hkd}",
+        "image_url": image_url,
         "purchase_url": p.purchase_url,
         "pitch_angle_hint": pitch_angles.get(p.product_id) or _default_angle(match),
         "match_reasons": list(match.match_reasons),
+        # ── Detail fields (REQUIRED for rich pitch) ─────────────────
+        "indications": list(p.indications),                   # 功效 list
+        "constitution_match": list(p.constitution_match),     # 適合體質
+        "key_benefit": p.key_benefit or "",                   # one-liner
+        "contraindications": list(p.contraindications),       # safety
     }
 
 
