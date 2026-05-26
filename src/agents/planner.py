@@ -286,6 +286,40 @@ def _rule_overrides(
             notes_for_writer=_build_returning_hint(user),
         )
 
+    # ── 急救穴位 reactive — acute pain detection ────────────────────────
+    # Fires for "我頭好痛 😭" type messages — user is in distress AND has
+    # a recognised symptom. Route to FAQ + CASUAL so we lead with empathy
+    # + immediate 30-second acupoint relief. Stays out of the way for
+    # casual mentions like "我有頭痛問題" (no acute signal).
+    from src.agents.acute_pain import detect_acute_pain  # noqa: PLC0415
+
+    acute = detect_acute_pain(user_message)
+    if acute is not None:
+        backup_line = (
+            f"後備穴位：{acute.backup_acupoint_zh}（如果第一個按完未夠）"
+            if acute.backup_acupoint_zh else ""
+        )
+        return PlannerDecision(
+            specialists=[SpecialistName.CASUAL, SpecialistName.FAQ],
+            mode="parallel",
+            reasoning=f"rule: 急救 — acute {acute.symptom_zh} detected",
+            notes_for_writer=(
+                f"【急救穴位 — 即刻緩解】\n\n"
+                f"用戶有急性「{acute.symptom_zh}」，宜先 give relief 而唔係解釋原因。\n\n"
+                f"主穴：{acute.primary_acupoint_zh}\n"
+                f"位置：{acute.location_zh}\n"
+                f"按法：{acute.press_instruction_zh}\n"
+                f"中醫角度：{acute.tcm_rationale_zh}\n"
+                f"{backup_line}\n\n"
+                f"Writer 嘅 3-bubble 順序：\n"
+                f"1. 短共情（一句，例：「咁辛苦😭」）\n"
+                f"2. 即刻畀解決方法 — 穴位位置 + 按法（用清晰嘅指引，唔好過長）\n"
+                f"3. 簡短中醫詮釋 + 問一句跟進「按完點啊？」\n\n"
+                f"FAQ Agent 會搵相關 KB cards 同自動 attach 穴位相 / 影片。\n"
+                f"唔好喺呢一 turn pitch 產品 — 純關心。"
+            ),
+        )
+
     # User explicitly wants free / DIY content → KB lookup, NOT Sales.
     # Even if last turn was a Sales pitch — they may be rejecting paid
     # options and want free alternatives.
