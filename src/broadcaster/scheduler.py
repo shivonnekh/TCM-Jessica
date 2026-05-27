@@ -33,6 +33,7 @@ from src.broadcaster.composer import (
     compose_appointment_prep,
     compose_monthly_food_tip,
     compose_weekly_sleep_tip,
+    compose_tongue_nudge,
     _load_product_names,
 )
 from src.broadcaster.menstrual_care import run_menstrual_care
@@ -74,6 +75,10 @@ FOLLOWUP_COOLDOWN_DAYS = int(os.environ.get("FOLLOWUP_COOLDOWN_DAYS", "30"))
 # Constitution recheck config
 RECHECK_COOLDOWN_DAYS = int(os.environ.get("RECHECK_COOLDOWN_DAYS", "90"))
 RECHECK_ACTIVITY_GAP_DAYS = int(os.environ.get("RECHECK_ACTIVITY_GAP_DAYS", "7"))
+
+# Tongue nudge: how long since last tongue photo before we ping them.
+# 30 days = one rough TCM调理 cycle, gives time for visible change.
+TONGUE_NUDGE_GAP_DAYS = int(os.environ.get("TONGUE_NUDGE_GAP_DAYS", "30"))
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -547,6 +552,67 @@ async def _run_appointment_prep(crm: object, llm: object, account_id: str) -> No
 
 
 # ---------------------------------------------------------------------------
+# Tongue progress monthly nudge
+# ---------------------------------------------------------------------------
+
+
+async def _run_tongue_nudge(crm: object, llm: object, account_id: str) -> None:
+    """Once-per-month nudge for users who uploaded a tongue photo >30 days
+    ago to re-upload. Without this, the TongueProgress vision comparison
+    feature stays dormant — users never come back on their own.
+    """
+    now = datetime.now(HKT)
+
+    if not _within_send_window(now):
+        return
+
+    tongue_cutoff = (now - timedelta(days=TONGUE_NUDGE_GAP_DAYS)).isoformat()
+    nudge_cutoff = (now - timedelta(days=TONGUE_NUDGE_GAP_DAYS)).isoformat()
+
+    phones = await crm.list_phones_for_tongue_nudge(tongue_cutoff, nudge_cutoff)
+
+    if not phones:
+        logger.debug("Tongue nudge: no eligible users")
+        return
+
+    logger.info("Tongue nudge: %d users eligible", len(phones))
+
+    iso_week = _current_iso_week(now)
+    sent_count = 0
+    errors = 0
+
+    for phone in phones:
+        if is_blocked(phone):
+            continue
+
+        if not await _user_is_eligible(crm, phone, iso_week, now):
+            continue
+
+        try:
+            user = await crm.get_user(phone)
+            if user is None:
+                continue
+
+            bubbles = await compose_tongue_nudge(llm, user)
+            if not bubbles:
+                continue
+
+            await wa_client.send_long_message(account_id, phone, "\n\n".join(bubbles))
+
+            sent_at = datetime.now(HKT).isoformat()
+            await crm.record_broadcast(phone, "tongue_nudge", iso_week, sent_at)
+            sent_count += 1
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Tongue nudge: failed for %s: %s", phone[-4:], exc)
+            errors += 1
+
+        await asyncio.sleep(BROADCAST_SEND_PACE_S)
+
+    logger.info("Tongue nudge cycle done — sent=%d errors=%d", sent_count, errors)
+
+
+# ---------------------------------------------------------------------------
 # Monthly food tip broadcast
 # ---------------------------------------------------------------------------
 
@@ -690,6 +756,10 @@ async def start_broadcast_loop(crm: object, llm: object, account_id: str) -> Non
             await _run_appointment_prep(crm, llm, account_id)
         except Exception as exc:  # noqa: BLE001
             logger.error("Appointment prep loop error (will retry next cycle): %s", exc)
+        try:
+            await _run_tongue_nudge(crm, llm, account_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Tongue nudge loop error (will retry next cycle): %s", exc)
         try:
             await _run_monthly_food_tip(crm, llm, account_id)
         except Exception as exc:  # noqa: BLE001

@@ -426,6 +426,79 @@ def _constitution_recheck_fallback(constitution: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Tongue progress nudge (monthly)
+# ---------------------------------------------------------------------------
+
+
+async def compose_tongue_nudge(
+    llm: object,
+    user: "User",
+) -> list[str]:
+    """Generate a gentle monthly nudge for users to re-upload a tongue photo.
+
+    Completes the 舌診進度追蹤 (TongueProgress) feature loop — without this,
+    users never come back to re-upload, and the before/after comparison
+    feature stays dormant.
+    """
+    constitution = user.constitution.value if user.constitution else "unknown"
+    n_prior_photos = len(user.tongue_photos)
+
+    system_prompt = """\
+你係 Jessica，心宜中醫 Care Plus 嘅中醫健康顧問。
+你主動聯絡一位之前做過舌診嘅用戶，邀請佢再影一張脷相，
+等你可以對比變化、報告調理進度。
+
+⚠️ 規則：
+- 唔好賣嘢，純粹關心 + 想睇進度
+- 唔好提價錢
+- 廣東話口語
+- 1-2 條訊息，每條唔超過 150 個字
+- 溫暖、好奇、令用戶有興趣再影一張
+
+輸出格式（JSON only）：
+{"bubbles": ["第一條訊息", "第二條訊息（可選）"]}
+"""
+
+    user_prompt = f"""用戶體質：{constitution}
+已有 {n_prior_photos} 張歷史脷相。
+距上次影脷相大約 1 個月。
+
+請寫 1-2 條廣東話訊息，邀請用戶再影一張脷相：
+- 提一提佢之前影過、可以對比
+- 提示影相小貼士（自然光、伸出脷、唔好啱啱刷牙）
+- 唔需要解釋好多 — 短、輕鬆、令人想拎電話影一張就 send 過嚟
+
+語氣：好奇 + 輕鬆，唔好像 spam reminder。"""
+
+    try:
+        response = await llm.messages.create(
+            model=DEFAULT_MODEL,
+            max_tokens=300,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"^```[a-z]*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw)
+        data = json.loads(raw)
+        bubbles = [b.strip() for b in data.get("bubbles", []) if b.strip()]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Tongue nudge compose failed (%s) — fallback", type(exc).__name__)
+        return _tongue_nudge_fallback(constitution)
+
+    cleaned = [b[:BUBBLE_MAX] for b in bubbles[:MAX_BUBBLES] if b and not _PRICE_RE.search(b)]
+    return cleaned if cleaned else _tongue_nudge_fallback(constitution)
+
+
+def _tongue_nudge_fallback(constitution: str) -> list[str]:
+    return [
+        f"嗨！上次你影脷相已經一個月喇 📷 你嘅{constitution}體質調理得點？",
+        "得閒影返張新嘅俾我，我幫你睇下進度 — 自然光、伸出脷、唔好啱啱刷牙就 OK 😊",
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Card loader helpers (new features)
 # ---------------------------------------------------------------------------
 

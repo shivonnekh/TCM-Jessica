@@ -325,6 +325,43 @@ class CRMRepoPG:
             )
         return [row["phone"] for row in rows]
 
+    async def list_phones_for_tongue_nudge(
+        self,
+        tongue_cutoff: str,
+        nudge_cutoff: str,
+        limit: int = 5000,
+    ) -> list[str]:
+        """Phones eligible for a monthly 舌診進度 nudge — see SQLite mirror."""
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT u.phone
+                FROM users u
+                WHERE u.status NOT IN ('churned', 'opted_out')
+                  AND u.constitution != 'unknown'
+                  AND EXISTS (
+                      SELECT 1 FROM tongue_photos t
+                      WHERE t.phone = u.phone
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM tongue_photos t
+                      WHERE t.phone = u.phone
+                        AND t.captured_at > $1
+                  )
+                  AND u.phone NOT IN (
+                      SELECT phone FROM user_broadcasts
+                      WHERE condition_code = 'tongue_nudge'
+                        AND sent_at > $2
+                  )
+                ORDER BY u.updated_at ASC
+                LIMIT $3
+                """,
+                tongue_cutoff,
+                nudge_cutoff,
+                limit,
+            )
+        return [row["phone"] for row in rows]
+
     async def list_phones_for_purchase_followup(
         self,
         activity_cutoff: str,

@@ -1399,3 +1399,255 @@ class TestWeeklySleepTipScheduler:
             await _run_weekly_sleep_tip(crm, MagicMock(), "acc_123")
         call_args = crm.get_broadcast_count_this_week.call_args[0]
         assert call_args[1].startswith("sleep-")
+
+
+# ---------------------------------------------------------------------------
+# Tongue nudge (monthly): composer + scheduler + cutoffs
+# ---------------------------------------------------------------------------
+
+
+class TestTongueNudgeCutoffs:
+    def test_nudge_gap_is_30_days(self):
+        from src.broadcaster.scheduler import TONGUE_NUDGE_GAP_DAYS
+        assert TONGUE_NUDGE_GAP_DAYS == 30
+
+
+class TestTongueNudgeComposer:
+    def _make_user(self, n_photos: int = 1):
+        from datetime import datetime as _dt
+
+        from src.crm.models import Constitution, TongueRecord, User
+        photos = [
+            TongueRecord(
+                photo_url=f"https://example.com/t{i}.jpg",
+                captured_at=_dt(2026, 4, 1, 10, 0),
+            )
+            for i in range(n_photos)
+        ]
+        return User(
+            phone="+85291234567",
+            constitution=Constitution.YANGXU,
+            tongue_photos=photos,
+        )
+
+    @pytest.mark.asyncio
+    async def test_fallback_on_llm_failure(self):
+        from src.broadcaster.composer import compose_tongue_nudge
+        llm = MagicMock()
+        llm.messages.create = AsyncMock(side_effect=Exception("LLM down"))
+        user = self._make_user()
+        bubbles = await compose_tongue_nudge(llm, user)
+        assert len(bubbles) >= 1
+        assert all(isinstance(b, str) and len(b) > 0 for b in bubbles)
+
+    @pytest.mark.asyncio
+    async def test_no_price_in_output(self):
+        from src.broadcaster.composer import compose_tongue_nudge
+        llm = MagicMock()
+        llm.messages.create = AsyncMock(return_value=MagicMock(
+            content=[MagicMock(text='{"bubbles": ["影張新脷相 HK$50?", "等我比較變化"]}')]
+        ))
+        user = self._make_user()
+        bubbles = await compose_tongue_nudge(llm, user)
+        for b in bubbles:
+            assert "HK$" not in b
+
+    @pytest.mark.asyncio
+    async def test_fallback_mentions_constitution(self):
+        from src.broadcaster.composer import _tongue_nudge_fallback
+        bubbles = _tongue_nudge_fallback("陽虛質")
+        assert any("陽虛質" in b for b in bubbles)
+
+
+class TestTongueNudgeScheduler:
+    def _make_crm(self, phones, already_sent=0):
+        from src.crm.models import Constitution, User
+        crm = MagicMock()
+        crm.list_phones_for_tongue_nudge = AsyncMock(return_value=phones)
+        crm.get_broadcast_count_this_week = AsyncMock(return_value=already_sent)
+        crm.get_last_broadcast_at = AsyncMock(return_value=None)
+        crm.record_broadcast = AsyncMock()
+        if phones:
+            user = User(
+                phone=phones[0],
+                constitution=Constitution.YANGXU,
+            )
+            crm.get_user = AsyncMock(return_value=user)
+        else:
+            crm.get_user = AsyncMock(return_value=None)
+        return crm
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_eligible_users(self):
+        from src.broadcaster.scheduler import _run_tongue_nudge
+        crm = self._make_crm([])  # zero phones
+        with patch("src.broadcaster.scheduler._within_send_window", return_value=True), \
+             patch("src.broadcaster.scheduler.wa_client") as mock_wa:
+            mock_wa.send_long_message = AsyncMock()
+            await _run_tongue_nudge(crm, MagicMock(), "acc_123")
+        mock_wa.send_long_message.assert_not_called()
+        crm.record_broadcast.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_blocked_phone(self):
+        from src.broadcaster.scheduler import _run_tongue_nudge
+        crm = self._make_crm(["+85291234567"])
+        with patch("src.broadcaster.scheduler.is_blocked", return_value=True), \
+             patch("src.broadcaster.scheduler._within_send_window", return_value=True), \
+             patch("src.broadcaster.scheduler.wa_client") as mock_wa:
+            mock_wa.send_long_message = AsyncMock()
+            await _run_tongue_nudge(crm, MagicMock(), "acc_123")
+        mock_wa.send_long_message.assert_not_called()
+        crm.record_broadcast.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_already_capped_this_week(self):
+        from src.broadcaster.scheduler import _run_tongue_nudge, BROADCAST_WEEKLY_CAP
+        crm = self._make_crm(["+85291234567"], already_sent=BROADCAST_WEEKLY_CAP)
+        with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler._within_send_window", return_value=True), \
+             patch("src.broadcaster.scheduler.wa_client") as mock_wa:
+            mock_wa.send_long_message = AsyncMock()
+            await _run_tongue_nudge(crm, MagicMock(), "acc_123")
+        mock_wa.send_long_message.assert_not_called()
+        crm.record_broadcast.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sends_and_records_for_eligible_user(self):
+        from src.broadcaster.scheduler import _run_tongue_nudge
+        phone = "+85291234567"
+        crm = self._make_crm([phone], already_sent=0)
+        mock_bubbles = ["影張新脷相俾我睇下 📷"]
+        with patch("src.broadcaster.scheduler.is_blocked", return_value=False), \
+             patch("src.broadcaster.scheduler._within_send_window", return_value=True), \
+             patch("src.broadcaster.scheduler.wa_client") as mock_wa, \
+             patch("src.broadcaster.scheduler.compose_tongue_nudge",
+                   new_callable=AsyncMock, return_value=mock_bubbles):
+            mock_wa.send_long_message = AsyncMock()
+            await _run_tongue_nudge(crm, MagicMock(), "acc_123")
+        mock_wa.send_long_message.assert_called_once()
+        crm.record_broadcast.assert_called_once()
+        args = crm.record_broadcast.call_args[0]
+        assert args[1] == "tongue_nudge"
+
+    @pytest.mark.asyncio
+    async def test_passes_correct_cutoffs_to_crm(self):
+        """Both cutoff args should be ~30 days ago in ISO format."""
+        from src.broadcaster.scheduler import _run_tongue_nudge
+        crm = self._make_crm([])
+        with patch("src.broadcaster.scheduler._within_send_window", return_value=True):
+            await _run_tongue_nudge(crm, MagicMock(), "acc_123")
+        call_args = crm.list_phones_for_tongue_nudge.call_args[0]
+        # Both cutoffs are isoformat strings ~30 days back
+        assert len(call_args) == 2
+        for cutoff in call_args:
+            assert "T" in cutoff  # ISO format has T separator
+
+
+# ---------------------------------------------------------------------------
+# CRM query for tongue nudge eligibility (SQLite end-to-end)
+# ---------------------------------------------------------------------------
+
+
+class TestTongueNudgeCRMQuery:
+    @pytest.mark.asyncio
+    async def test_excludes_users_with_no_tongue_photos(self, tmp_path):
+        from datetime import datetime as _dt
+        from src.crm.models import Constitution, User
+        from src.crm.repo import CRMRepo
+        repo = await CRMRepo.connect(tmp_path / "test.db")
+        try:
+            # User with known constitution but NO tongue photos
+            u = await repo.get_or_create_user("+85291000001")
+            await repo.save_user(u.with_updates(constitution=Constitution.YANGXU))
+            cutoff = _dt(2026, 4, 1).isoformat()
+            phones = await repo.list_phones_for_tongue_nudge(cutoff, cutoff)
+            assert "+85291000001" not in phones
+        finally:
+            await repo.close()
+
+    @pytest.mark.asyncio
+    async def test_excludes_users_with_recent_tongue_photo(self, tmp_path):
+        from datetime import datetime as _dt
+        from src.crm.models import Constitution, TongueRecord
+        from src.crm.repo import CRMRepo
+        repo = await CRMRepo.connect(tmp_path / "test.db")
+        try:
+            phone = "+85291000002"
+            u = await repo.get_or_create_user(phone)
+            await repo.save_user(u.with_updates(constitution=Constitution.YANGXU))
+            # Recent photo (today)
+            await repo.add_tongue_record(phone, TongueRecord(
+                photo_url="https://x/now.jpg",
+                captured_at=_dt(2026, 5, 26),
+            ))
+            cutoff = _dt(2026, 4, 26).isoformat()  # 30 days back
+            phones = await repo.list_phones_for_tongue_nudge(cutoff, cutoff)
+            assert phone not in phones
+        finally:
+            await repo.close()
+
+    @pytest.mark.asyncio
+    async def test_includes_user_with_old_tongue_photo(self, tmp_path):
+        from datetime import datetime as _dt
+        from src.crm.models import Constitution, TongueRecord
+        from src.crm.repo import CRMRepo
+        repo = await CRMRepo.connect(tmp_path / "test.db")
+        try:
+            phone = "+85291000003"
+            u = await repo.get_or_create_user(phone)
+            await repo.save_user(u.with_updates(constitution=Constitution.YANGXU))
+            # Photo from 60 days ago (older than cutoff)
+            await repo.add_tongue_record(phone, TongueRecord(
+                photo_url="https://x/old.jpg",
+                captured_at=_dt(2026, 3, 27),
+            ))
+            cutoff = _dt(2026, 4, 26).isoformat()
+            phones = await repo.list_phones_for_tongue_nudge(cutoff, cutoff)
+            assert phone in phones
+        finally:
+            await repo.close()
+
+    @pytest.mark.asyncio
+    async def test_excludes_unknown_constitution(self, tmp_path):
+        from datetime import datetime as _dt
+        from src.crm.models import TongueRecord
+        from src.crm.repo import CRMRepo
+        repo = await CRMRepo.connect(tmp_path / "test.db")
+        try:
+            phone = "+85291000004"
+            await repo.get_or_create_user(phone)  # constitution defaults UNKNOWN
+            await repo.add_tongue_record(phone, TongueRecord(
+                photo_url="https://x/old.jpg",
+                captured_at=_dt(2026, 3, 1),
+            ))
+            cutoff = _dt(2026, 4, 26).isoformat()
+            phones = await repo.list_phones_for_tongue_nudge(cutoff, cutoff)
+            assert phone not in phones
+        finally:
+            await repo.close()
+
+    @pytest.mark.asyncio
+    async def test_excludes_users_already_nudged_this_period(self, tmp_path):
+        from datetime import datetime as _dt
+        from src.crm.models import Constitution, TongueRecord
+        from src.crm.repo import CRMRepo
+        repo = await CRMRepo.connect(tmp_path / "test.db")
+        try:
+            phone = "+85291000005"
+            u = await repo.get_or_create_user(phone)
+            await repo.save_user(u.with_updates(constitution=Constitution.YANGXU))
+            # Old tongue photo (would normally qualify)
+            await repo.add_tongue_record(phone, TongueRecord(
+                photo_url="https://x/old.jpg",
+                captured_at=_dt(2026, 3, 1),
+            ))
+            # But already nudged recently
+            await repo.record_broadcast(
+                phone, "tongue_nudge", "2026-W21", _dt(2026, 5, 20).isoformat()
+            )
+            cutoff = _dt(2026, 4, 26).isoformat()
+            phones = await repo.list_phones_for_tongue_nudge(cutoff, cutoff)
+            assert phone not in phones
+        finally:
+            await repo.close()

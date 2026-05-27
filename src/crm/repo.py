@@ -370,6 +370,55 @@ class CRMRepo:
         rows = await cur.fetchall()
         return [row["phone"] for row in rows]
 
+    async def list_phones_for_tongue_nudge(
+        self,
+        tongue_cutoff: str,
+        nudge_cutoff: str,
+        limit: int = 5000,
+    ) -> list[str]:
+        """Phones eligible for a monthly 舌診進度 nudge.
+
+        Criteria:
+            - Active user (not churned/opted_out)
+            - Constitution known (not UNKNOWN)
+            - Has at least one prior tongue_photo
+            - Most recent tongue_photo is older than ``tongue_cutoff``
+            - No tongue_nudge broadcast since ``nudge_cutoff``
+
+        Args:
+            tongue_cutoff: ISO timestamp — any tongue photo newer than
+                this means user already uploaded recently, skip them.
+            nudge_cutoff: ISO timestamp — no tongue_nudge broadcast
+                after this (one nudge per 30 days).
+        """
+        cur = await self._db.execute(
+            """
+            SELECT u.phone
+            FROM users u
+            WHERE u.status NOT IN ('churned', 'opted_out')
+              AND u.constitution != 'unknown'
+              AND EXISTS (
+                  SELECT 1 FROM tongue_photos t
+                  WHERE t.phone = u.phone
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM tongue_photos t
+                  WHERE t.phone = u.phone
+                    AND t.captured_at > ?
+              )
+              AND u.phone NOT IN (
+                  SELECT phone FROM user_broadcasts
+                  WHERE condition_code = 'tongue_nudge'
+                    AND sent_at > ?
+              )
+            ORDER BY u.updated_at ASC
+            LIMIT ?
+            """,
+            (tongue_cutoff, nudge_cutoff, limit),
+        )
+        rows = await cur.fetchall()
+        return [row["phone"] for row in rows]
+
     async def list_phones_for_purchase_followup(
         self,
         activity_cutoff: str,
