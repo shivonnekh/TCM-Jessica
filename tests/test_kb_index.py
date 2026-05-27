@@ -13,8 +13,10 @@ def index() -> KBIndex:
 
 
 def test_index_loads_expected_card_count(index: KBIndex) -> None:
-    # MANIFEST.md says 52 cards across 3 domains
-    assert len(index) == 52
+    # MANIFEST.md says 52 base cards across 3 domains;
+    # +8 constitution deep-dive cards added 2026-05-27 (pinghe/yangxu/yinxu/
+    # tanshi/shire/xueyu/qiyu/tebing — 氣虛 already existed) → 60.
+    assert len(index) == 60
 
 
 def test_known_soup_card_present(index: KBIndex) -> None:
