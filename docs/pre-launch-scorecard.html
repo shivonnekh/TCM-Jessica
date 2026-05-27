@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jessica AI — Pre-Launch Scorecard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e8edf4 100%);
+      color: #1a1a2e;
+      padding: 32px 16px;
+      min-height: 100vh;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+
+    header { text-align: center; margin-bottom: 32px; }
+    h1 { font-size: 2rem; color: #2d6a4f; margin-bottom: 8px; }
+    .date { color: #6b7280; font-size: 1rem; margin-bottom: 16px; }
+    .verdict {
+      display: inline-block;
+      padding: 10px 22px;
+      border-radius: 24px;
+      font-size: 1rem;
+      font-weight: 700;
+      background: #ecfdf5;
+      color: #047857;
+      border: 2px solid #6ee7b7;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin: 28px 0;
+    }
+    @media (max-width: 700px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stat {
+      background: #fff;
+      padding: 18px 14px;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .stat-num { font-size: 1.8rem; font-weight: 700; color: #2d6a4f; }
+    .stat-label { font-size: 0.82rem; color: #6b7280; margin-top: 4px; }
+
+    /* Section cards */
+    .section {
+      background: #fff;
+      border-radius: 16px;
+      padding: 26px 28px;
+      margin-bottom: 22px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 2px solid #f3f4f6;
+    }
+    .section-icon { font-size: 1.6rem; }
+    .section h2 { font-size: 1.3rem; color: #111827; }
+    .section-tag {
+      margin-left: auto;
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 12px;
+    }
+    .tag-ready { background: #ecfdf5; color: #047857; }
+    .tag-blocked { background: #fef2f2; color: #b91c1c; }
+    .tag-pending { background: #fffbeb; color: #b45309; }
+
+    /* Item rows */
+    .item {
+      display: grid;
+      grid-template-columns: 32px 1fr auto;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid #f3f4f6;
+      align-items: center;
+    }
+    .item:last-child { border-bottom: 0; }
+    .item-icon {
+      font-size: 1.2rem;
+      text-align: center;
+    }
+    .item-body { font-size: 0.94rem; line-height: 1.6; }
+    .item-body strong { color: #111827; }
+    .item-body .note {
+      display: block;
+      font-size: 0.84rem;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    .item-status {
+      font-size: 0.74rem;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .status-done { background: #d1fae5; color: #065f46; }
+    .status-blocked { background: #fee2e2; color: #991b1b; }
+    .status-action { background: #fef3c7; color: #92400e; }
+
+    /* Blocker callout */
+    .blocker {
+      margin-top: 14px;
+      padding: 14px 16px;
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.92rem;
+      color: #7f1d1d;
+      line-height: 1.6;
+    }
+    .blocker strong { color: #7f1d1d; }
+    .blocker .action {
+      display: block;
+      margin-top: 8px;
+      padding: 8px 12px;
+      background: #fff;
+      border-radius: 6px;
+      font-size: 0.86rem;
+      color: #374151;
+    }
+
+    /* Action list */
+    .action-block {
+      background: linear-gradient(135deg, #fffbeb 0%, #fef9e7 100%);
+      border-radius: 12px;
+      padding: 22px 26px;
+      margin-top: 22px;
+      border-left: 4px solid #f59e0b;
+    }
+    .action-block h3 { color: #78350f; margin-bottom: 14px; font-size: 1.05rem; }
+    .action-list {
+      list-style: none;
+      padding: 0;
+    }
+    .action-list li {
+      padding: 10px 0;
+      font-size: 0.94rem;
+      color: #4b5563;
+      line-height: 1.6;
+      border-top: 1px solid rgba(245, 158, 11, 0.2);
+    }
+    .action-list li:first-child { border-top: 0; }
+    .action-list .who {
+      display: inline-block;
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 10px;
+      background: #fef3c7;
+      color: #92400e;
+      margin-right: 10px;
+    }
+    .action-list .effort {
+      display: inline-block;
+      font-size: 0.74rem;
+      color: #6b7280;
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <header>
+      <h1>🌿 Jessica — Pre-Launch Scorecard</h1>
+      <p class="date">2026-05-27</p>
+      <div class="verdict">✓ READY TO LAUNCH（少數 external blockers）</div>
+    </header>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-num">543</div><div class="stat-label">Tests passing</div></div>
+      <div class="stat"><div class="stat-num">7</div><div class="stat-label">Specialist agents</div></div>
+      <div class="stat"><div class="stat-num">11</div><div class="stat-label">Broadcast channels</div></div>
+      <div class="stat"><div class="stat-num">93</div><div class="stat-label">Git commits</div></div>
+    </div>
+
+    <!-- ───────────── READY TO SHIP ───────────── -->
+    <section class="section">
+      <div class="section-header">
+        <span class="section-icon">✅</span>
+        <h2>已 Ready — 全部已 deploy 生產環境</h2>
+        <span class="section-tag tag-ready">READY</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🧠</div>
+        <div class="item-body">
+          <strong>對話 AI（HK 廣東話）</strong>
+          <span class="note">7 個 specialist agents + Planner + Writer，全 stack 用 gpt-5.4-mini</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">👅</div>
+        <div class="item-body">
+          <strong>舌診 + 體質評估</strong>
+          <span class="note">Vision AI 自動分析脷相，4 條 MCQ 後 declare 體質 + 推薦食譜</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">📊</div>
+        <div class="item-body">
+          <strong>舌診進度追蹤</strong>
+          <span class="note">用戶第 2 次上載脷相 → 自動 before/after 對比 + 月度 nudge</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🍲</div>
+        <div class="item-body">
+          <strong>產品推介系統</strong>
+          <span class="note">10 款湯 + 3 款膏藥，按體質 + 訴求自動配對，每款必含 名 + 價錢 + 功效 + 圖片</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">📅</div>
+        <div class="item-body">
+          <strong>預約系統</strong>
+          <span class="note">到診 / 視診 + 自動配 沙田 / 馬鞍山 分店 + 用戶迷糊時自動 default 沙田</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🆘</div>
+        <div class="item-body">
+          <strong>即時症狀緩解</strong>
+          <span class="note">用戶話「我頭痛」→ 自動由 KB 取穴位 + 附圖 + 影片，30 秒可緩解</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">💬</div>
+        <div class="item-body">
+          <strong>跨 session 長期記憶</strong>
+          <span class="note">每 15 條對話自動 summary 入 CRM，下次見到用戶 Jessica 仲記得</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">👋</div>
+        <div class="item-body">
+          <strong>告別總結 + 主動跟進</strong>
+          <span class="note">講「拜拜」自動 summary 今次對話，下次返嚟主動問跟進</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">📢</div>
+        <div class="item-body">
+          <strong>11 個 broadcast channels</strong>
+          <span class="note">天氣關懷、24 節氣、體質複查、購後跟進、每周茶飲、穴位、覆診提醒、月度食療、每周睡眠、月事陪伴、舌診月度 nudge</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">📚</div>
+        <div class="item-body">
+          <strong>知識庫</strong>
+          <span class="note">52 cards（食療 / 穴位 / 體質 / 安全 / 都市健康 / 婦科 等），vector + keyword hybrid search</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🛡️</div>
+        <div class="item-body">
+          <strong>Safety guardrails</strong>
+          <span class="note">紅旗症狀 → 建議西醫、孕婦禁忌、未診斷時唔講體質、唔作產品價錢</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🔍</div>
+        <div class="item-body">
+          <strong>Observability + Trace viewer</strong>
+          <span class="note">每 turn 完整 trace（Planner decision / specialist calls / Writer output / CRM diff），admin UI 可查</span>
+        </div>
+        <span class="item-status status-done">LIVE</span>
+      </div>
+    </section>
+
+    <!-- ───────────── BLOCKED ON EXTERNAL ───────────── -->
+    <section class="section">
+      <div class="section-header">
+        <span class="section-icon">🚧</span>
+        <h2>Blocked — 等外部 input</h2>
+        <span class="section-tag tag-blocked">NEEDS ACTION</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">📚</div>
+        <div class="item-body">
+          <strong>KB 補強 — 6 個缺口 topic</strong>
+          <span class="note">三高（糖尿/血壓/膽固醇）/ 9 體質 deep dive / 情志（七情五臟）/ 男性健康 / 中藥目錄 / 24 節氣 cards</span>
+        </div>
+        <span class="item-status status-blocked">中醫師</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🌿</div>
+        <div class="item-body">
+          <strong>產品 ingredients / 材料 欄位</strong>
+          <span class="note">10 款湯每款嘅實際藥材 list — 用戶問「呢隻湯有咩材料」時可以答</span>
+        </div>
+        <span class="item-status status-blocked">心宜中醫</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🚀</div>
+        <div class="item-body">
+          <strong>Render auto-deploy webhook 修復</strong>
+          <span class="note">GitHub webhook 4 日前壞咗，而家每次都要手動 trigger deploy。Workaround OK，但長遠應修</span>
+        </div>
+        <span class="item-status status-action">老闆</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">💾</div>
+        <div class="item-body">
+          <strong>Postgres free → Starter 升級</strong>
+          <span class="note">Free tier 2026-06-20 expire，到時整個 CRM data 會被 delete。$7/mo 升 Starter 永久 + 自動 backup</span>
+        </div>
+        <span class="item-status status-action">老闆</span>
+      </div>
+
+      <div class="blocker">
+        <strong>⏰ Critical Deadline：</strong> Postgres 2026-06-20 expire。如果想保留 CRM 數據，最遲要喺 6 月 19 號升級。
+        <span class="action">Render Dashboard → Databases → tcm-jessica-db → Plan tab → Starter（$7/mo）</span>
+      </div>
+    </section>
+
+    <!-- ───────────── NICE TO HAVE ───────────── -->
+    <section class="section">
+      <div class="section-header">
+        <span class="section-icon">💡</span>
+        <h2>Nice to Have — 可以 post-launch 慢慢做</h2>
+        <span class="section-tag tag-pending">OPTIONAL</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🧪</div>
+        <div class="item-body">
+          <strong>真實脷照 end-to-end constitution 流程驗證</strong>
+          <span class="note">而家用 mock 脷照測試 vision，launch 後揀一個真實用戶嘅完整 flow trace 做 audit</span>
+        </div>
+        <span class="item-status status-action">launch 後</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">📈</div>
+        <div class="item-body">
+          <strong>Cost monitoring dashboard</strong>
+          <span class="note">當前 admin UI 已有 trace，加埋 LLM token 用量 + 每天累計 cost 會更直接</span>
+        </div>
+        <span class="item-status status-action">post-launch</span>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🔄</div>
+        <div class="item-body">
+          <strong>Prompt caching optimization</strong>
+          <span class="note">用 OpenAI prompt caching 慳 ~40% input cost，當用戶量到 200+ active 嘅時候才值得</span>
+        </div>
+        <span class="item-status status-action">≥200 users</span>
+      </div>
+    </section>
+
+    <!-- ───────────── NEXT ACTIONS ───────────── -->
+    <div class="action-block">
+      <h3>🎯 由你哋出發嘅 next actions</h3>
+      <ul class="action-list">
+        <li>
+          <span class="who">老闆</span>
+          升級 Render Postgres 去 Starter plan
+          <span class="effort">($7/mo，5 分鐘，必做 deadline 6/20)</span>
+        </li>
+        <li>
+          <span class="who">老闆</span>
+          Render Dashboard 修返 GitHub webhook（disconnect → reconnect repo）
+          <span class="effort">(5 分鐘，可選 — 而家手動 deploy work)</span>
+        </li>
+        <li>
+          <span class="who">中醫師</span>
+          補 KB content：先補三高 + 9 體質 deep dive（最多用戶會問）
+          <span class="effort">(每張卡 ~30 min，6 張 = 一個下午)</span>
+        </li>
+        <li>
+          <span class="who">心宜中醫</span>
+          填 10 款湯嘅 ingredients list
+          <span class="effort">(Excel 一份就得，clinic 應該有)</span>
+        </li>
+        <li>
+          <span class="who">中一</span>
+          Pilot test：揾 5-10 個真用戶試 Jessica 一星期，搜集反饋
+          <span class="effort">(launch 前最後 sanity check)</span>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+</body>
+</html>
