@@ -144,10 +144,28 @@ Ported from `dr-baba-agent`. When a user fires 3 messages in 4 seconds, we wait 
 Storage: **PostgreSQL** in production (Render free tier, 1GB, persistent). SQLite for local dev. `CRMRepo` (aiosqlite) and `CRMRepoPG` (asyncpg) implement the same async surface — `repo_factory.py` picks the driver based on `DATABASE_URL`.
 
 ### 3.4 Planner Agent (`src/agents/planner.py`)
-- Input: CRM snapshot + buffered user message + last 5 turns of history
-- Output: `RoutingPlan { specialists: [Specialist], reasoning: str, parallel: bool }`
-- Can route to **1 or 2 specialists in parallel**. Two is the cap (more = too messy for Writer to compose).
-- Routing rules live in the planner prompt + a small ruleset (e.g., `media.tongue_photo == True` → must include Constitution Agent).
+
+The Planner does **three jobs in one LLM call** (gpt-5.4-mini):
+
+1. **Route** to 1-2 specialists. Two is the cap (more = too messy for Writer).
+2. **Rephrase** the user message into clean HK 廣東話 (`rephrased_query`).
+   Strips filler / mixed scripts / typos so downstream specialists work
+   on a normalised input. Passed via `SpecialistInput.rephrased_query`;
+   specialists pick it up via the `effective_query` property.
+3. **Extract** health complaints (`extracted_pain_points: list[str]`) as
+   NER tags. Multi-tag in single turn supported ("頭痛+失眠+腰痛" → 3 tags),
+   plus catch-up sweep of last 5 turns for any complaints CRM missed.
+
+Output: `PlannerDecision { specialists, mode, reasoning, notes_for_writer,
+proactive_hint, rephrased_query, extracted_pain_points }`.
+
+**Why one LLM call**: gpt-5.4-mini can handle routing + rephrase + NER
+together; splitting into separate calls would double latency + cost for
+no quality gain.
+
+Rule fast-paths bypass the LLM entirely for deterministic cases
+(tongue photo, wa.me order, farewell, MCQ answers, simple greetings,
+health complaints, etc.). See §3.5 table.
 
 ### 3.5 Specialist Agents (`src/agents/`)
 
@@ -155,19 +173,25 @@ Storage: **PostgreSQL** in production (Render free tier, 1GB, persistent). SQLit
 |-------|-------|-----------|---------------|
 | `greeting_agent.py` | none | none | `{ tone: "warm", topic: str, suggested_followup: str? }` |
 | `casual_agent.py` | none | none | Empathic chit-chat for returning users + non-medical topics. Driven by Planner's `notes_for_writer` for proactive follow-up. |
-| `faq_agent.py` | `search_kb`, `read_card` | `data/knowledge_base/` (soups, constitution, faq cards) | `{ answer_facts: list, cards_used: list[card_id], confidence: float }` |
-| `sales_agent.py` | `recommend_product`, `share_product_image`, `share_order_link` | `data/products/` | `{ products_to_pitch: list, pitch_angle: str, urgency: enum }` |
-| `constitution_agent.py` | `analyze_tongue` (vision), `ask_constitution_question`, `declare_constitution` | `data/knowledge_base/constitution/` | `{ phase: "asking" \| "diagnosing", question?: MCQ, diagnosis?: Constitution, soup_recs?: list }` |
-| `appointment_agent.py` | `match_clinic_by_location`, `propose_slot`, `confirm_booking` | `data/clinics/clinics.json` | `{ phase: "asking_location" \| "proposing_slot" \| "confirming", payload: ... }` |
+| `faq_agent.py` | `search_kb`, `read_card` | `data/knowledge_base/` (52 cards: soups, constitution, faq, acupressure) — vector + keyword hybrid via `tools/kb_search.py` | `{ answer_facts: list, cards_used: list[card_id], confidence: float }` |
+| `sales_agent.py` | `recommend_product`, `share_product_image`, `share_order_link` | `data/products/` | `{ products_to_pitch: [{ name, price_display, indications, constitution_match, image_url }], pitch_angle, urgency }` — payload **MUST include 功效 (indications) + image** for every product mentioned (Writer enforces this) |
+| `constitution_agent.py` | `analyze_tongue` (vision, gpt-5.4-mini), `ask_constitution_question`, `declare_constitution` | `data/knowledge_base/constitution/` | 4-phase state machine: asking_tongue → analyzing_tongue → asking_mcq (4 MCQs) → declaring. On declare, **persists a TongueRecord** to `user.tongue_photos` + clears `constitution_*` temp_state. |
+| `appointment_agent.py` | `match_clinic_by_location`, `propose_slot`, `confirm_booking` | `data/clinics/clinics.json` | `{ phase: "asking_mode" \| "asking_location" \| "proposing_slot" \| "confirming", payload: ... }`. Auto-defaults to `in_person` after asking_mode once + user shows scheduling intent. |
+| `tongue_progress_agent.py` | vision compare (gpt-5.4-mini), diff structured fields, narrative LLM call | uses prior `TongueRecord` from CRM | `{ phase: "compared" \| "first_photo", current_analysis, previous_record, changes, overall_direction, narrative_zh }`. Emits `tongue_photos_append` diff so pipeline persists the new record. |
 
-**Planner-level enhancements** (rules that fire without consulting the LLM):
+**Planner-level rule fast-paths** (bypass LLM, deterministic):
 
 | Rule | File | Effect |
 |------|------|--------|
-| Farewell detection | `planner.py:_is_farewell` | "拜拜/bye/多謝/晚安" → GREETING + closing summary in `notes_for_writer` |
-| Returning user greeting | `planner.py:_build_returning_hint` | "hi" + CRM has context → CASUAL + proactive follow-up question |
-| Emotion detection (七情) | `agents/emotion.py` | Stress/anger/sadness → 七情 → 五臟 mapping → CASUAL + FAQ |
-| Symptom memory | `agents/symptom_memory.py` | Same symptom mentioned ≥3 times → CASUAL + FAQ with caring tone |
+| wa.me order | `sales_agent._ORDER_RE` | "想訂【...HK$...】" → SALES (parse + collect address) |
+| Awaiting delivery address | `_TS_AWAITING_ADDRESS` | mid-order-flow → SALES |
+| Tongue photo + prior history | `planner.py` | media + `constitution!=UNKNOWN` + `len(tongue_photos)>=1` → TONGUE_PROGRESS (else CONSTITUTION) |
+| Mid-constitution flow | `planner.py:_looks_like_mcq_answer` | findings present + UNKNOWN constitution + msg looks like A/B/C/D → CONSTITUTION (escape valve: non-MCQ msg falls through) |
+| Farewell detection | `planner.py:_is_farewell` | tail-position match on 拜拜/bye/多謝/晚安/etc. → GREETING + CRM-aware closing summary |
+| Returning user greeting | `planner.py:_build_returning_hint` | "hi" + CRM has context → CASUAL + proactive follow-up referencing prior pain_points |
+| Health complaint shortcut | `agents/acute_pain.py:detect_health_complaint` | 頭痛/失眠/腰痛/etc. + returning user → FAQ + CASUAL (KB owns acupoint content, NO hardcoded mapping) |
+| Emotion detection (七情) | `agents/emotion.py:detect_emotion` | Stress/anger/sadness → 七情 → 五臟 mapping → CASUAL + FAQ. Wins over health-complaint rule when both fire. |
+| Symptom memory | `agents/symptom_memory.py` | Same symptom mentioned ≥3 times in history → CASUAL + FAQ with caring tone |
 
 ### 3.6 Final Writer Agent (`src/agents/writer.py`)
 - Input: CRM context + user message + ALL specialist outputs
@@ -178,11 +202,21 @@ Storage: **PostgreSQL** in production (Render free tier, 1GB, persistent). SQLit
 ### 3.7 Orchestrator (`src/orchestrator/`)
 The conductor — runs the full pipeline per turn:
 1. CRM load
-2. Planner call
-3. Fan-out specialist calls (sequential or parallel per Planner decision)
-4. Writer call
-5. CRM write + trace persist
-6. **Background: fire memory consolidator if ≥15 new messages** (§3.8) — `asyncio.create_task`, zero latency to user
+2. Planner call (route + rephrase + extract — see §3.4)
+3. Fan-out specialist calls (sequential or parallel per Planner decision).
+   Each receives `SpecialistInput.rephrased_query` for cleaner downstream
+   LLM/KB work.
+4. Writer call (gpt-5.4-mini composes 5-bubble reply; adaptive cap to 8
+   bubbles when payload has ≥2 products)
+5. CRM write + trace persist:
+   - Apply specialist diffs (`_apply_specialist_diffs`)
+   - **Two-rail pain_points extraction**: use `decision.extracted_pain_points`
+     if present, else fall back to `detect_all_health_complaints(text)`
+     keyword scan. Prevents CRM going empty when LLM omits the field OR
+     when a rule fast-path bypassed the LLM entirely.
+   - Persist new appointments + new tongue_photos via `_append` convention
+6. **Background: fire memory consolidator if ≥15 new messages** (§3.8) —
+   `asyncio.create_task`, zero latency to user
 7. Send bubbles via WhatsApp client
 
 Every step emits a structured trace event. See §5.
@@ -289,14 +323,37 @@ Also expose a **live trace viewer** (simple FastAPI + HTML) at `/trace/<turn_id>
 
 ## 6. Stack
 
-- **Language:** Python 3.11+ (3.13 in production)
+- **Language:** Python 3.11+ (3.14 in production via Render)
 - **Web/API:** FastAPI (webhook + trace viewer + admin views)
-- **LLM:** gpt-4o-mini via OpenAI (Anthropic-shaped facade in `src/llm.py` — `LLMClient` wraps `AsyncOpenAI` and exposes the `client.messages.create(...)` interface so agents written against `AsyncAnthropic` work unchanged). Switched from Claude on 2026-05-21 after Anthropic credits ran out.
-- **Vision:** gpt-4o-mini vision (tongue photo analysis)
-- **DB:** PostgreSQL in production (Render free, 1GB, persistent). SQLite for local dev. Dispatched by `repo_factory.py` based on `DATABASE_URL`.
-- **Vector search:** pgvector (Postgres extension) — indexed on startup if `DATABASE_URL` is Postgres. Hybrid KB search via `tools/vector_store.py`.
-- **Deployment:** Render (Singapore region, free plan + free Postgres). See `render.yaml` + `docs/DEPLOYMENT.md`.
-- **Test:** pytest (422 passing)
+- **LLM:** **gpt-5.4-mini** via OpenAI for all roles (Planner / Writer /
+  Specialists / Vision). Migrated from gpt-4o-mini on 2026-05-26 (forced
+  by deprecation deadline; gpt-5.4-mini is ~60% cheaper too). `src/llm.py`
+  is an Anthropic-shaped facade — `LLMClient` wraps `AsyncOpenAI` so agents
+  use `client.messages.create(...)` unchanged. `_uses_max_completion_tokens()`
+  routes gpt-5.x / o-series to the new `max_completion_tokens` parameter
+  (gpt-5 family rejects `max_tokens`).
+- **Voice transcribe:** `gpt-4o-transcribe` (migrated from `gpt-4o-mini-transcribe`
+  which retired 2026-06-01).
+- **DB:** PostgreSQL in production (Render free, 1GB, persistent — **free
+  tier expires 90 days after creation; current expiry 2026-06-20**).
+  SQLite for local dev. Dispatched by `repo_factory.py` based on `DATABASE_URL`.
+- **Vector search:** pgvector (Postgres extension) — indexed on startup if
+  `DATABASE_URL` is Postgres. Hybrid KB search via `tools/vector_store.py`.
+- **Schema migrations:** `CREATE TABLE IF NOT EXISTS` only creates new
+  tables — does NOT add new columns to existing ones. To add a column:
+  (1) extend the `User` model, (2) add to `_USER_COLUMN_MIGRATIONS` in
+  `src/crm/repo.py`, (3) add to `_PG_USER_COLUMN_MIGRATIONS` in
+  `src/crm/repo_pg.py`, (4) add to `EXPECTED_NEW_COLUMNS` in
+  `tests/test_schema_migrations.py`. Step (4) is a forcing function that
+  goes red if any of (1)-(3) is missed. **For Postgres, do NOT use
+  `ALTER TABLE ADD COLUMN IF NOT EXISTS` — asyncpg 0.31 + Python 3.14
+  hits a protocol bug. Use `information_schema` lookup + conditional ADD
+  (see `_migrate_pg_user_columns`).**
+- **Deployment:** Render (Singapore region, web Starter + Postgres free).
+  **Auto-deploy webhook is currently broken** — push to main does not
+  trigger deploy. Workaround: `POST /v1/services/{id}/deploys` via Render
+  API. See `docs/DEPLOYMENT.md`.
+- **Test:** pytest (523 passing as of 2026-05-26).
 
 ---
 
@@ -310,9 +367,22 @@ pip install -e .
 uvicorn src.web:app --reload --port 8000
 
 # Run tests
-pytest -q                                          # all
+pytest -q                                          # all (523 tests)
 pytest tests/test_planner_rules.py -v              # one file
-pytest tests/test_crm_repo.py::test_upcoming_appointments_returns_phone_in_window -v
+pytest tests/test_schema_migrations.py -v          # migration-path tests
+
+# Run end-to-end persona dry-run (20-turn dialogue, ~$0.50 OpenAI cost)
+python3 scripts/persona_dry_run.py                 # full 20 turns
+python3 scripts/persona_dry_run.py --short         # first 5 turns only
+
+# Targeted QA harnesses (each ~$1 OpenAI)
+python3 scripts/qa_sales_flow.py                   # 6 sales scenarios
+python3 scripts/qa_constitution_flow.py            # 5 constitution scenarios
+python3 scripts/qa_conversation_flow.py            # 8 conversation scenarios
+
+# Manually trigger Render deploy (workaround for broken webhook)
+curl -s -X POST -H "Authorization: Bearer $RENDER_API_KEY" \
+  "https://api.render.com/v1/services/srv-d879lsmq1p3s73av6f80/deploys" -d '{}'
 
 # Reset a test user (wipes all CRM data for one phone)
 python -c "import asyncio; from src.crm.repo import CRMRepo; \
@@ -361,5 +431,22 @@ Same hard triggers as `~/.claude/rules/common/agents.md`. Additionally for this 
 - Do not let a Specialist write user-facing text. Specialists return structured data; Writer composes.
 - Do not let the Planner skip the Writer. Even for a one-word "ok" the Writer normalizes the bubble.
 - Do not hardcode product names, soup names, clinic addresses, or 體質 logic in Python — they live in `data/`.
+- Do not hardcode KB content in Python (e.g. acupoint → symptom mappings).
+  KB cards + `AcupointImageMap` own that. We tried and ripped it out on
+  2026-05-26 — Python copies of KB drift out of sync with clinic edits.
 - Do not bloat the Planner prompt with specialist-specific instructions. Specialists own their own prompts.
 - Do not add a 6th specialist without explicit approval. The orchestration cost grows non-linearly.
+- Do not add a new column to `User` model without updating
+  `_USER_COLUMN_MIGRATIONS` (SQLite) + `_PG_USER_COLUMN_MIGRATIONS` (PG)
+  + `EXPECTED_NEW_COLUMNS` (test). `CREATE TABLE IF NOT EXISTS` is a
+  trap — existing tables are NOT modified. Caused a prod-down on 2026-05-26.
+- Do not use `ALTER TABLE ADD COLUMN IF NOT EXISTS` on Postgres via
+  asyncpg 0.31 + Python 3.14 — protocol bug. Use information_schema
+  lookup + conditional ADD instead.
+- Do not pass `max_tokens` to gpt-5.x / o-series — they require
+  `max_completion_tokens`. `_uses_max_completion_tokens()` in `src/llm.py`
+  handles this; new direct OpenAI calls should use the facade.
+- Do not skip running `scripts/persona_dry_run.py` after any change to
+  the Planner, Writer, or a Specialist prompt. The dry-run found 4
+  bugs in the same day that unit tests had passed — it tests against
+  real LLM, with realistic conversation state.
