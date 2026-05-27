@@ -179,6 +179,37 @@ class JessicaPipeline:
                 if merged != list(user_after.pain_points):
                     user_after = user_after.with_updates(pain_points=merged)
 
+            # 5c. Apply Planner's inferred TCM patterns (辨證 layer).
+            # Each inferred pattern becomes an ObservedPattern entry
+            # appended to user.observed_patterns with timestamp, source
+            # tag (jessica_inferred), and turn_id. Append-only — the
+            # historical trail is preserved so the clinic doctor can
+            # review temporal evolution via /admin/patterns.
+            #
+            # Confidence < 0.5 filtered upstream by the Planner prompt,
+            # but we double-check here to be safe.
+            if decision.inferred_patterns:
+                from src.crm.models import ObservedPattern  # noqa: PLC0415
+
+                new_observations = [
+                    ObservedPattern(
+                        name=p.name,
+                        confidence=p.confidence,
+                        observed_at=turn_start,
+                        source="jessica_inferred",
+                        evidence=list(p.evidence),
+                        layman_zh=p.layman_zh,
+                        turn_id=turn_id,
+                    )
+                    for p in decision.inferred_patterns
+                    if p.confidence >= 0.5 and p.name
+                ]
+                if new_observations:
+                    user_after = user_after.with_updates(
+                        observed_patterns=list(user_after.observed_patterns)
+                        + new_observations
+                    )
+
             # Defensive media filter — Writer LLM has been observed to
             # hallucinate URLs like 'https://example.com/ointment1.jpg'
             # even when told to copy verbatim. Whitelist outbound media

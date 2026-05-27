@@ -54,6 +54,7 @@ from src.crm.repo_pg import (
 EXPECTED_NEW_COLUMNS: frozenset[str] = frozenset({
     "last_period_start",
     "cycle_length_days",
+    "observed_patterns",
 })
 
 
@@ -325,19 +326,22 @@ async def test_migrate_helper_safe_on_already_migrated_db(tmp_path: Path) -> Non
 @pytest.mark.asyncio
 async def test_pg_migration_adds_only_missing_columns() -> None:
     """When information_schema reports a column missing, helper must
-    run ALTER TABLE for that column. When present, must skip."""
+    run ALTER TABLE for that column. When present, must skip.
+
+    Scenario: first column missing, rest present.
+    """
     conn = MagicMock()
 
-    # First column: missing → fetchval returns None
-    # Second column: present → fetchval returns 1
-    fetchval_responses = [None, 1]
+    n = len(_PG_USER_COLUMN_MIGRATIONS)
+    # First column: missing (None); remaining: present (1)
+    fetchval_responses = [None] + [1] * (n - 1)
     conn.fetchval = AsyncMock(side_effect=fetchval_responses)
     conn.execute = AsyncMock()
 
     await _migrate_pg_user_columns(conn)
 
-    # Should have checked both columns
-    assert conn.fetchval.await_count == len(_PG_USER_COLUMN_MIGRATIONS)
+    # Should have checked every column once
+    assert conn.fetchval.await_count == n
     # Should have only ALTER'd the missing one
     assert conn.execute.await_count == 1
     altered_sql = conn.execute.await_args_list[0][0][0]

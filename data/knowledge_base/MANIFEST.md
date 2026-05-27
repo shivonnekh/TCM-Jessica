@@ -4,10 +4,14 @@ Generated: 2026-05-21 (ported from dr-baba-agent) — extended 2026-05-27
 Source: `/Users/shivonne/Claude Code/dr-baba-agent/data/cards/tcm-wellness-中醫養生/`
 Destination: `/Users/shivonne/Claude Code/TCM-Jessica/data/knowledge_base/`
 
-**Total cards:** 68 (52 ported + 16 added 2026-05-27)
+**Total cards:** 71 (52 ported + 19 added 2026-05-27)
 - soups: 5
 - constitution: 12 (4 original + 8 體質 deep-dives)
-- faq: 51 (43 original + 8 added: 三高×3, 七情五臟, 男性×2, 中藥目錄, 24 節氣)
+- faq: 54 (43 original + 11 added: 三高×3, 七情五臟, 男性×2, 中藥目錄, 24 節氣 + 焦慮 + 鼻敏感 + 皮膚痕)
+
+**辨證 layer**: 6 existing condition cards enriched with 證型 enumeration
+(失眠, 頭痛, 胃脹, 便秘, 月經, 感冒), plus 3 new cards added native
+with 證型 sections (焦慮, 鼻敏感, 皮膚痕).
 
 ## 2026-05-27 KB enhancement push (16 cards)
 
@@ -32,6 +36,25 @@ Destination: `/Users/shivonne/Claude Code/TCM-Jessica/data/knowledge_base/`
 - `faq/tcm_mens_prostate_urinary.json` — 前列腺 / 尿頻（red-flag escalation）
 - `faq/tcm_herbs_directory.json` — 40 味常用中藥目錄
 - `faq/tcm_24_solar_terms.json` — 24 節氣養生（broadcaster 用）
+
+### 辨證 layer additions (2026-05-27 second push):
+
+**3 new cards with native 證型 enumeration:**
+- `faq/tcm_anxiety_emotional.json` — 焦慮 / 鬱悶 (4 patterns: 肝鬱氣滯 / 心脾兩虛 / 痰火擾心 / 心腎不交) + 撒瑪利亞會 escalation
+- `faq/tcm_nose_allergy.json` — 鼻敏感 (4 patterns: 肺氣虛 / 脾氣虛 / 腎陽虛 / 肺經鬱熱) + 三伏/三九天灸
+- `faq/tcm_skin_itch.json` — 皮膚痕癢 (5 patterns: 風熱 / 風寒 / 血虛風燥 / 濕熱 / 血熱) + anaphylaxis 999 escalation
+
+**6 existing condition cards enriched with 【臨床辨證 — 證型細分】 section:**
+- `faq/tcm_sleep_insomnia.json` — 5 patterns: 心脾兩虛 / 陰虛火旺 / 肝鬱化火 / 胃不和 / 痰熱擾心
+- `faq/tcm_headache_migraine.json` — 5 patterns: 肝陽上亢 / 風寒外襲 / 血虛 / 痰濁阻竅 / 瘀血阻絡
+- `faq/tcm_digestion_bloating.json` — 4 patterns: 脾虛 / 肝鬱犯脾 / 食滯 / 濕困中焦
+- `faq/tcm_digestion_stool.json` — 4 patterns: 脾虛 / 腸燥津枯 / 氣滯 / 陽虛便秘
+- `faq/tcm_womens_menstrual.json` — 4 patterns: 氣滯血瘀 / 寒凝胞宮 / 氣血兩虛 / 濕熱蘊結
+- `faq/tcm_cold_flu_prevention.json` — added 氣虛感冒 / 陰虛感冒 (already had 風寒/風熱/暑濕)
+
+These 9 cards together support the new Planner辨證 inference (gpt-4o emits
+`inferred_patterns` per turn → pipeline persists to `user.observed_patterns`
+→ Writer surfaces with advisory language when confidence ≥0.7).
 
 **Skipped (paid product cards — handled by a different system):**
 - `tcm_paid_soups.json`

@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
     -- Menstrual cycle tracking (optional — female users only)
     last_period_start  TEXT,                      -- ISO date YYYY-MM-DD, nullable
     cycle_length_days  INTEGER NOT NULL DEFAULT 28,
+    -- 辨證 layer — JSON array of ObservedPattern entries, append-only
+    observed_patterns  TEXT NOT NULL DEFAULT '[]',
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );

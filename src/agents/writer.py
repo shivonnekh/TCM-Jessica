@@ -473,6 +473,30 @@ def _build_prompt(
         else ""
     )
 
+    # 辨證 (Pattern inference) — surface ONLY when confidence ≥0.7, ONLY
+    # as advisory (「可能屬於」). Lower confidence is invisible to Writer.
+    high_conf_patterns = [
+        p for p in planner_decision.inferred_patterns if p.confidence >= 0.7
+    ]
+    pattern_line = ""
+    if high_conf_patterns:
+        primary = high_conf_patterns[0]  # highest confidence first
+        pattern_line = (
+            f"\n\n【辨證 hint — Writer 必須 follow 呢個 advisory 模式】\n"
+            f"Planner 推斷用戶可能屬於「{primary.name}」（confidence {primary.confidence:.2f}）。\n"
+            f"簡化解釋：{primary.layman_zh}\n"
+            f"用戶原話 evidence：{primary.evidence}\n\n"
+            f"Writer 要做：喺其中一個 bubble 加一句 advisory："
+            f"「你呢個情況可能屬於{primary.name} — 即係{primary.layman_zh}嗰類狀態，"
+            f"建議搵中醫師面診確認下喎 🌿」\n"
+            f"⚠️ 規則：\n"
+            f"  - 永遠用「可能」「建議睇醫師確認」呢類字眼 — 唔好斷症\n"
+            f"  - 唔好開藥方、唔好指定針灸 protocol（liability 線）\n"
+            f"  - 一個 bubble 講晒就夠，唔好喺多 bubble 重複\n"
+            f"  - 如果 specialist 已經 push 緊 sales/appointment，就唔好搶 focus，"
+            f"    pattern 提一句後立即返主線"
+        )
+
     return f"""用戶 CRM:
 - phone: {user.phone}
 - name: {user.name or "(未知)"}
@@ -489,7 +513,7 @@ def _build_prompt(
 Planner 路由:
 - specialists: {[s.value for s in planner_decision.specialists]}
 - mode: {planner_decision.mode}
-- 原因: {planner_decision.reasoning}{notes_line}{proactive_hint_line}
+- 原因: {planner_decision.reasoning}{notes_line}{proactive_hint_line}{pattern_line}
 
 Specialist intent (按 priority 由高到低):
 

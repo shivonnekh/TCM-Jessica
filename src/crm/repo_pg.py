@@ -96,9 +96,10 @@ class CRMRepoPG:
                     pain_points, products_pitched, products_purchased,
                     notes, tags, temp_state,
                     last_period_start, cycle_length_days,
+                    observed_patterns,
                     created_at, updated_at
                 )
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
                 ON CONFLICT (phone) DO UPDATE SET
                     name = EXCLUDED.name,
                     status = EXCLUDED.status,
@@ -114,6 +115,7 @@ class CRMRepoPG:
                     temp_state = EXCLUDED.temp_state,
                     last_period_start = EXCLUDED.last_period_start,
                     cycle_length_days = EXCLUDED.cycle_length_days,
+                    observed_patterns = EXCLUDED.observed_patterns,
                     updated_at = EXCLUDED.updated_at
                 """,
                 user.phone,
@@ -131,6 +133,10 @@ class CRMRepoPG:
                 json.dumps(user.temp_state, ensure_ascii=False),
                 user.last_period_start.isoformat() if user.last_period_start else None,
                 user.cycle_length_days,
+                json.dumps(
+                    [op.model_dump(mode="json") for op in user.observed_patterns],
+                    ensure_ascii=False,
+                ),
                 user.created_at.isoformat(),
                 user.updated_at.isoformat(),
             )
@@ -596,6 +602,19 @@ def _row_to_user(
     except (KeyError, IndexError, TypeError, ValueError):
         pass
 
+    # observed_patterns may be absent in legacy DBs
+    raw_patterns_json = "[]"
+    try:
+        raw_patterns_json = row["observed_patterns"] or "[]"
+    except (KeyError, IndexError, TypeError):
+        pass
+
+    from src.crm.models import ObservedPattern  # noqa: PLC0415
+
+    parsed_patterns = [
+        ObservedPattern.model_validate(p) for p in json.loads(raw_patterns_json)
+    ]
+
     return User(
         phone=row["phone"],
         name=row["name"],
@@ -612,6 +631,7 @@ def _row_to_user(
         temp_state=temp_state,
         last_period_start=_date.fromisoformat(raw_period) if raw_period else None,
         cycle_length_days=cycle_days,
+        observed_patterns=parsed_patterns,
         conversation_history=history,
         appointments=appointments,
         tongue_photos=tongue_photos or [],
@@ -641,6 +661,7 @@ _PG_USER_COLUMN_MIGRATIONS: tuple[tuple[str, str], ...] = (
     # (column_name, ddl_fragment for ADD COLUMN)
     ("last_period_start", "last_period_start TEXT"),
     ("cycle_length_days", "cycle_length_days INTEGER NOT NULL DEFAULT 28"),
+    ("observed_patterns", "observed_patterns TEXT NOT NULL DEFAULT '[]'"),
 )
 
 

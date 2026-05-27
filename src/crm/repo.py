@@ -86,9 +86,10 @@ class CRMRepo:
                 pain_points, products_pitched, products_purchased,
                 notes, tags, temp_state,
                 last_period_start, cycle_length_days,
+                observed_patterns,
                 created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(phone) DO UPDATE SET
                 name = excluded.name,
                 status = excluded.status,
@@ -104,6 +105,7 @@ class CRMRepo:
                 temp_state = excluded.temp_state,
                 last_period_start = excluded.last_period_start,
                 cycle_length_days = excluded.cycle_length_days,
+                observed_patterns = excluded.observed_patterns,
                 updated_at = excluded.updated_at
             """,
             (
@@ -122,6 +124,10 @@ class CRMRepo:
                 json.dumps(user.temp_state, ensure_ascii=False),
                 user.last_period_start.isoformat() if user.last_period_start else None,
                 user.cycle_length_days,
+                json.dumps(
+                    [op.model_dump(mode="json") for op in user.observed_patterns],
+                    ensure_ascii=False,
+                ),
                 user.created_at.isoformat(),
                 user.updated_at.isoformat(),
             ),
@@ -593,7 +599,20 @@ def _row_to_user(
     except (IndexError, KeyError):
         pass
 
+    # observed_patterns also may be absent in legacy DBs
+    raw_patterns: list[dict] = []
+    try:
+        raw = row["observed_patterns"]
+        if raw:
+            raw_patterns = json.loads(raw)
+    except (IndexError, KeyError, TypeError):
+        pass
+
     from datetime import date as _date
+
+    from src.crm.models import ObservedPattern  # noqa: PLC0415
+
+    parsed_patterns = [ObservedPattern.model_validate(p) for p in raw_patterns]
 
     return User(
         phone=row["phone"],
@@ -611,6 +630,7 @@ def _row_to_user(
         temp_state=temp_state,
         last_period_start=_date.fromisoformat(raw_period) if raw_period else None,
         cycle_length_days=_try_int(row, "cycle_length_days", 28),
+        observed_patterns=parsed_patterns,
         conversation_history=history,
         appointments=appointments,
         tongue_photos=tongue_photos or [],
@@ -643,6 +663,7 @@ _USER_COLUMN_MIGRATIONS: tuple[tuple[str, str], ...] = (
     # (column_name, ddl_fragment for ADD COLUMN)
     ("last_period_start", "last_period_start TEXT"),
     ("cycle_length_days", "cycle_length_days INTEGER NOT NULL DEFAULT 28"),
+    ("observed_patterns", "observed_patterns TEXT NOT NULL DEFAULT '[]'"),
 )
 
 

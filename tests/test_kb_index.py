@@ -13,16 +13,23 @@ def index() -> KBIndex:
 
 
 def test_index_loads_expected_card_count(index: KBIndex) -> None:
-    # MANIFEST.md says 52 base cards across 3 domains. 2026-05-27 KB
-    # enhancement added 16 cards (one-day push):
-    #   - 8 constitution deep-dives (平和/陽虛/陰虛/痰濕/濕熱/血瘀/氣鬱/特稟)
-    #   - 3 三高 cards (diabetes/hypertension/cholesterol)
-    #   - 1 七情五臟 card
-    #   - 2 men's health cards (kidney + prostate)
-    #   - 1 中藥目錄 (40 herbs)
-    #   - 1 24 節氣 養生
-    # → 52 + 16 = 68
-    assert len(index) == 68
+    # MANIFEST.md says 52 base cards. Two 2026-05-27 KB enhancement
+    # pushes:
+    #   First push (16 cards):
+    #     - 8 constitution deep-dives (平和/陽虛/陰虛/痰濕/濕熱/血瘀/氣鬱/特稟)
+    #     - 3 三高 cards (diabetes/hypertension/cholesterol)
+    #     - 1 七情五臟 card
+    #     - 2 men's health cards (kidney + prostate)
+    #     - 1 中藥目錄 (40 herbs)
+    #     - 1 24 節氣 養生
+    #   Second push (3 cards, 辨證 layer addition):
+    #     - tcm_anxiety_emotional (4 patterns: 肝鬱/心脾兩虛/痰火擾心/心腎不交)
+    #     - tcm_nose_allergy (4 patterns: 肺氣虛/脾氣虛/腎陽虛/肺經鬱熱)
+    #     - tcm_skin_itch (5 patterns: 風熱/風寒/血虛風燥/濕熱/血熱)
+    # 52 + 16 + 3 = 71
+    # Plus 6 existing cards enriched with 證型 enumeration (sleep, headache,
+    # digestion bloating + stool, women's menstrual, cold/flu) — same count.
+    assert len(index) == 71
 
 
 def test_known_soup_card_present(index: KBIndex) -> None:

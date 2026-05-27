@@ -90,6 +90,31 @@ class TongueRecord(BaseModel):
     constitution_at_time: str = "unknown"
 
 
+class ObservedPattern(BaseModel):
+    """A 證 (TCM pattern/syndrome) observed during a conversation.
+
+    Append-only history — every Planner inference produces a new entry
+    timestamped with the source. Clinic doctor can later confirm/reject
+    via /admin which updates `source` (jessica_inferred → doctor_confirmed
+    / doctor_rejected) but never deletes the historical row.
+
+    Why this isn't on `constitution` (which is one static value):
+        - constitution changes over months/years
+        - 證 changes over weeks (acute pattern of the moment)
+        - Doctor needs a temporal trail to track treatment progress
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str                       # "肝鬱氣滯", "心脾兩虛", etc.
+    confidence: float               # 0.0-1.0
+    observed_at: datetime
+    source: str                     # "jessica_inferred" | "doctor_confirmed" | "doctor_rejected"
+    evidence: list[str] = Field(default_factory=list)
+    layman_zh: str = ""             # Plain-language explanation for Writer
+    turn_id: str | None = None      # Link to the conversation turn
+
+
 class Promotion(BaseModel):
     """Active offer surfaced by Sales/Appointment agents.
 
@@ -130,6 +155,11 @@ class User(BaseModel):
     products_purchased: list[str] = Field(default_factory=list)
     appointments: list[AppointmentRecord] = Field(default_factory=list)
     tongue_photos: list[TongueRecord] = Field(default_factory=list)
+
+    # 辨證 layer — append-only history of TCM patterns observed in
+    # conversation. Different from `constitution` (static, set once)
+    # because 證 changes over weeks. See ObservedPattern docstring.
+    observed_patterns: list[ObservedPattern] = Field(default_factory=list)
 
     # Menstrual cycle tracking (optional — female users only)
     last_period_start: date | None = None
