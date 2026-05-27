@@ -260,3 +260,119 @@ def test_propose_slot_in_person_requires_clinic() -> None:
     now = datetime(2026, 5, 25, 10, 0)
     slot = _propose_slot(mode="in_person", clinic=None, now=now)
     assert slot is None
+
+
+# ── District fallback (2026-05-27) — mirror of mode fallback ──────────
+# When user picks in_person but won't say a district, the agent must
+# NOT loop forever asking. After 1 ask + scheduling intent OR vague
+# "you decide" reply, default to the main clinic (沙田).
+
+
+@pytest.mark.asyncio
+async def test_district_first_ask_uses_temp_state_counter(
+    agent: AppointmentAgent,
+) -> None:
+    """First time in asking_location: bump counter to 1, don't default."""
+    user = User(
+        phone="+85291234567",
+        temp_state={"appointment_mode": "in_person"},
+    )
+    inp = SpecialistInput(user=user, user_message="我想預約覆診")
+    out, _ = await agent.run(inp)
+    assert out.payload["phase"] == "asking_location"
+    ts_diff = out.suggested_user_state_diff.get("temp_state", {})
+    assert ts_diff.get("appointment_district_ask_count") == 1
+
+
+@pytest.mark.asyncio
+async def test_district_defaults_after_asked_once_and_vague_yes(
+    agent: AppointmentAgent,
+) -> None:
+    """User said in_person, was asked for district, replied 「都可以」 →
+    default to 沙田 and proceed to phase 3 (propose slot)."""
+    user = User(
+        phone="+85291234567",
+        temp_state={
+            "appointment_mode": "in_person",
+            "appointment_district_ask_count": 1,
+        },
+    )
+    inp = SpecialistInput(user=user, user_message="都可以呀")
+    out, _ = await agent.run(inp)
+    # Must NOT loop back to asking_location
+    assert out.payload["phase"] != "asking_location"
+    # The agent should have set district to fallback
+    assert out.suggested_user_state_diff.get("district") == "沙田"
+
+
+@pytest.mark.asyncio
+async def test_district_defaults_after_asked_once_and_scheduling_intent(
+    agent: AppointmentAgent,
+) -> None:
+    """User said in_person, asked once, replied with date/time but no
+    district → default."""
+    user = User(
+        phone="+85291234567",
+        temp_state={
+            "appointment_mode": "in_person",
+            "appointment_district_ask_count": 1,
+        },
+    )
+    inp = SpecialistInput(user=user, user_message="下星期三下午三點得唔得")
+    out, _ = await agent.run(inp)
+    assert out.payload["phase"] != "asking_location"
+    assert out.suggested_user_state_diff.get("district") == "沙田"
+
+
+@pytest.mark.asyncio
+async def test_district_second_ask_is_more_direct(
+    agent: AppointmentAgent,
+) -> None:
+    """If user ignores district and gives no signal, ask again — but
+    more directly, mentioning the default option."""
+    user = User(
+        phone="+85291234567",
+        temp_state={
+            "appointment_mode": "in_person",
+            "appointment_district_ask_count": 1,
+        },
+    )
+    # Empty / non-signal reply
+    inp = SpecialistInput(user=user, user_message="嗯")
+    out, _ = await agent.run(inp)
+    assert out.payload["phase"] == "asking_location"
+    # Writer hint should be more direct (mention default options)
+    hint = out.payload.get("writer_hint", "")
+    assert "沙田" in hint or "馬鞍山" in hint
+    # Counter should advance
+    ts_diff = out.suggested_user_state_diff.get("temp_state", {})
+    assert ts_diff.get("appointment_district_ask_count") == 2
+
+
+@pytest.mark.asyncio
+async def test_district_explicit_district_skips_fallback(
+    agent: AppointmentAgent,
+) -> None:
+    """If user names a district in the same message, that wins — no
+    fallback needed even if scheduling intent also present."""
+    user = User(
+        phone="+85291234567",
+        temp_state={
+            "appointment_mode": "in_person",
+            "appointment_district_ask_count": 1,
+        },
+    )
+    inp = SpecialistInput(user=user, user_message="我住馬鞍山，下星期三可以嗎")
+    out, _ = await agent.run(inp)
+    assert out.suggested_user_state_diff.get("district") == "馬鞍山"
+
+
+def test_looks_vague_yes_matches_common_patterns() -> None:
+    from src.agents.appointment_agent import _looks_vague_yes
+    assert _looks_vague_yes("都可以")
+    assert _looks_vague_yes("都得呀")
+    assert _looks_vague_yes("隨便啦")
+    assert _looks_vague_yes("你揀")
+    assert _looks_vague_yes("冇所謂")
+    assert not _looks_vague_yes("我住沙田")
+    assert not _looks_vague_yes("")

@@ -41,9 +41,30 @@ logger = logging.getLogger("agents.appointment")
 # temp_state keys (namespaced)
 _TS_MODE = "appointment_mode"            # "in_person" | "online_video"
 _TS_PROPOSED = "appointment_proposed"    # {clinic_id, date, time, mode}
-_TS_MODE_ASK_COUNT = "appointment_mode_ask_count"  # int: how many times we've asked
+_TS_MODE_ASK_COUNT = "appointment_mode_ask_count"      # int
+_TS_DISTRICT_ASK_COUNT = "appointment_district_ask_count"  # int
 
 _VALID_MODES = ("in_person", "online_video")
+
+# Default clinic for in-person appointments when the user is evasive
+# about district. 沙田 is the main 心宜中醫 branch + most central.
+_DEFAULT_DISTRICT_FALLBACK = "沙田"
+
+# Vague "you decide / whatever" replies — user is OK with any clinic.
+# When seen at asking_location, default to the main clinic instead of
+# looping forever asking for a district.
+_VAGUE_YES_TOKENS = (
+    "都可以", "都得", "都ok", "都OK",
+    "隨便", "随便", "邊度都得", "哪都行",
+    "冇所謂", "无所谓", "你揀", "你选",
+    "你話事", "都行",
+)
+
+
+def _looks_vague_yes(text: str) -> bool:
+    if not text:
+        return False
+    return any(tok in text for tok in _VAGUE_YES_TOKENS)
 
 # Scheduling-intent signals — user is clearly trying to BOOK, not browse.
 # When seen, we treat them as a strong signal to default mode + propose.
@@ -194,13 +215,42 @@ class AppointmentAgent:
 
         # ── PHASE 2: in-person requires district ────────────────────
         if mode == "in_person" and not user_district:
-            payload = {
-                "phase": "asking_location",
-                "writer_hint": (
-                    "問用戶住邊區 / 喺邊區方便，溫和咁問，唔係列表式。"
-                ),
-            }
-            return _wrap(payload, suggested_diff, tools_called), usage
+            ask_count = int(ts.get(_TS_DISTRICT_ASK_COUNT, 0))
+
+            # Fallback: after asking once + user is being evasive
+            # ("都可以" / "你揀") OR has clear scheduling intent without
+            # naming a district, default to the main clinic (沙田).
+            # Prevents the asking_location loop pathology mirror of the
+            # asking_mode bug fixed earlier.
+            is_vague = _looks_vague_yes(inp.user_message)
+            has_scheduling = _has_scheduling_intent(inp.user_message)
+
+            if ask_count >= 1 and (is_vague or has_scheduling):
+                user_district = _DEFAULT_DISTRICT_FALLBACK
+                suggested_diff["district"] = user_district
+                # Don't reset counter — record we resolved.
+                suggested_diff["temp_state"] = ts
+                logger.info(
+                    "appointment: defaulted district=%s (ask_count=%d, "
+                    "vague=%s scheduling=%s, msg=%r)",
+                    user_district, ask_count, is_vague, has_scheduling,
+                    inp.user_message[:50],
+                )
+                # Fall through to Phase 3 with the default district set.
+            else:
+                ts[_TS_DISTRICT_ASK_COUNT] = ask_count + 1
+                suggested_diff["temp_state"] = ts
+                payload = {
+                    "phase": "asking_location",
+                    "writer_hint": (
+                        "問用戶住邊區 / 喺邊區方便，溫和咁問，唔係列表式。"
+                        if ask_count == 0 else
+                        # Second ask: more direct + offer the default
+                        "用戶第二次冇答到區。直接問住沙田定馬鞍山方便啲？"
+                        "或者話佢知唔肯定就會幫佢約沙田主分店。"
+                    ),
+                }
+                return _wrap(payload, suggested_diff, tools_called), usage
 
         # ── PHASE 3: propose slot ────────────────────────────────────
         clinic_payload: dict[str, Any] | None = None
