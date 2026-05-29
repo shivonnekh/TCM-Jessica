@@ -817,13 +817,26 @@ async def chatdaddy_webhook(request: Request) -> JSONResponse:
         if not hmac.compare_digest(incoming.encode(), WEBHOOK_SECRET.encode()):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-    # 2. Parse payload
+    # 2. Parse payload — capture raw body first for diagnostics
     try:
+        raw_body = await request.body()
         payload = await request.json()
     except Exception:
         return JSONResponse({"error": "invalid json"}, status_code=400)
 
-    # 2a. Diagnostic capture — bounded in-memory buffer, never raises.
+    # 2a. Raw body log — helps diagnose poll vote payloads where parsed
+    # JSON might lose fields. Print first 2000 chars to stdout (Render logs).
+    try:
+        raw_str = raw_body.decode("utf-8", errors="replace")
+        if "vote" in raw_str.lower() or "poll" in raw_str.lower():
+            print(f"[WEBHOOK-RAW] POLL/VOTE payload ({len(raw_str)} bytes):\n{raw_str[:2000]}")
+        elif not payload.get("data", [{}])[0].get("fromMe", True):
+            # Log all inbound messages (fromMe=False) for debugging
+            print(f"[WEBHOOK-RAW] inbound ({len(raw_str)} bytes):\n{raw_str[:500]}")
+    except Exception:
+        pass
+
+    # 2b. Diagnostic capture — bounded in-memory buffer, never raises.
     try:
         diagnostic_capture.capture(payload)
     except Exception:
