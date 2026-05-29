@@ -226,11 +226,15 @@ async def send_message(
     chat_id: str,
     text: str,
     attachments: list[dict] | None = None,
+    buttons: list[dict] | None = None,
 ) -> None:
     """Send a WhatsApp message via ChatDaddy IM API.
 
     URL: POST https://api.chatdaddy.tech/im/messages/{accountId}/{chatId}
-    Body: { text, miscOptions: { withTyping: true }, attachments? }
+    Body: { text, miscOptions: { withTyping: true }, attachments?, buttons? }
+
+    buttons format: [{"id": "btn-id", "text": "Button Label"}, ...]
+    Note: buttons are only supported on the last bubble of a multi-bubble reply.
     """
     from urllib.parse import quote
 
@@ -242,6 +246,8 @@ async def send_message(
     }
     if attachments:
         payload["attachments"] = attachments
+    if buttons:
+        payload["buttons"] = buttons
 
     http = _get_http()
     print(f"[SEND-DEBUG] Calling ChatDaddy: url={url[:100]} text_len={len(text)}")

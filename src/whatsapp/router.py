@@ -452,12 +452,15 @@ async def _process_turn(
         except Exception:  # noqa: BLE001
             logger.exception("malformed media_to_send: %s", raw_media)
 
+        buttons = list(getattr(result.writer_output, "buttons", None) or [])
+
         await _send_bubbles(
             account_id=account_id,
             chat_id=chat_id,
             bubbles=bubbles,
             media_to_send=media_to_send,
             inbound_was_voice=bool(transcript),
+            buttons=buttons,
         )
 
 
@@ -602,6 +605,7 @@ async def _send_bubbles(
     bubbles: list[str],
     media_to_send: list[dict] | None = None,
     inbound_was_voice: bool = False,
+    buttons: list[dict] | None = None,
 ) -> None:
     """Send the Writer's bubble list with the client's typing-delay model.
 
@@ -612,6 +616,9 @@ async def _send_bubbles(
     kick off MiniMax TTS in the background while the text bubbles stream,
     then send the audio file as a final attachment so the voice-replying
     user gets an audible reply without perceiving the synthesis latency.
+
+    Buttons: when provided, attached to the LAST text bubble only.
+    WhatsApp only renders buttons on the final message in a sequence.
     """
     if not bubbles:
         return
@@ -636,6 +643,7 @@ async def _send_bubbles(
             bubbles=bubbles,
             media_to_send=media_to_send,
             voice_task=voice_task,
+            buttons=buttons or [],
         )
     finally:
         # Defensive: if we crashed before awaiting voice_task, cancel it so
@@ -652,6 +660,7 @@ async def _send_bubbles_impl(
     bubbles: list[str],
     media_to_send: list[dict],
     voice_task: asyncio.Task[Any] | None,
+    buttons: list[dict] | None = None,
 ) -> None:
     """Inner body of ``_send_bubbles`` — see that function's docstring."""
     # Group media by the bubble index they should appear after.
@@ -669,6 +678,7 @@ async def _send_bubbles_impl(
             idx = 0
         media_by_idx.setdefault(idx, []).append(url)
 
+    last_idx = len(bubbles) - 1
     for i, bubble in enumerate(bubbles):
         text = (bubble or "").strip()
         if not text:
@@ -676,8 +686,16 @@ async def _send_bubbles_impl(
         if i > 0:
             delay = client._typing_delay(text)  # noqa: SLF001 — intentional reuse
             await asyncio.sleep(delay)
+        # Attach buttons to the last bubble only. Use send_message directly
+        # (not send_long_message) so the buttons payload isn't stripped by
+        # the bubble-splitter — Writer already pre-split, text is short.
+        is_last = i == last_idx
+        bubble_buttons = (buttons or []) if is_last else None
         try:
-            await client.send_long_message(account_id, chat_id, text)
+            if bubble_buttons:
+                await client.send_message(account_id, chat_id, text, buttons=bubble_buttons)
+            else:
+                await client.send_long_message(account_id, chat_id, text)
         except client.SendProbablyDeliveredError:
             logger.warning(
                 "[WA] send timed out but probably delivered (chat=%s, bubble=%d/%d)",
