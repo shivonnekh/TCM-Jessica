@@ -20,6 +20,11 @@ class ChatDaddyMessage:
     timestamp: int          # Unix seconds
     sender_name: str = ""   # data[0].pushName or ""
     attachments: tuple[dict, ...] = field(default_factory=tuple)
+    # Poll vote fields — set when this message is a poll vote notification.
+    # Router calls client.fetch_poll_selection(account_id, chat_id, poll_msg_id)
+    # to resolve the selected option, then reprocesses as a normal MCQ answer.
+    is_poll_vote: bool = False
+    poll_msg_id: str = ""   # quoted.id — the original poll message to look up
     # Group-chat support — in group chats, chat_id is the group JID and
     # the actual sender is in sender_contact_id. mentioned_jids lists the
     # JIDs explicitly @-tagged in this message — but in practice ChatDaddy
@@ -173,26 +178,26 @@ def parse_webhook(payload: dict) -> ChatDaddyMessage | None:
     if not isinstance(msg, dict):
         return None
 
-    # Poll vote handling — when a user votes on a WhatsApp poll, ChatDaddy
-    # fires a message-insert with messageType="pollUpdateMessage" and an
-    # empty text field. We extract the selected option so the MCQ state
-    # machine can process it as a normal A/B/C/D answer.
+    # Poll vote detection — ChatDaddy sends "A new vote was cast in this poll"
+    # as a message-insert when a user votes on a poll. The actual selection
+    # is NOT in the webhook payload; it must be resolved by re-fetching the
+    # original poll message from the REST API (client.fetch_poll_selection).
+    # We flag it here and let the router handle the async resolution.
     msg_type = (msg.get("messageType") or msg.get("type") or "").lower()
+    text_raw = (msg.get("text") or "").strip()
     is_poll_vote = (
         "poll" in msg_type
         or "vote" in msg_type
         or bool(msg.get("vote"))
         or bool(msg.get("pollUpdates"))
         or bool(msg.get("selectedOptions"))
+        or "a new vote was cast" in text_raw.lower()
     )
+    poll_msg_id = ""
     if is_poll_vote:
-        selected = _extract_poll_selection(msg)
-        if not selected:
-            # Unknown poll vote format — capture but don't process
-            return None
-        # Inject selected option as text so the rest of the pipeline
-        # treats it as a regular user message (MCQ answer).
-        msg = {**msg, "text": selected, "messageType": "text"}
+        quoted = msg.get("quoted") or {}
+        poll_msg_id = str(quoted.get("id") or "").strip()
+        # Clear the generic notification text so it isn't passed to agents
 
     message_id = msg.get("id") or payload.get("id") or ""
     chat_id = msg.get("chatId") or msg.get("senderContactId") or ""
@@ -231,10 +236,14 @@ def parse_webhook(payload: dict) -> ChatDaddyMessage | None:
         isinstance(quoted, dict) and quoted.get("fromMe")
     )
 
-    # Inject quoted text into the message so the agent has full context.
-    # Without this, a reply of "好" to the bot's soup recipe looks like
-    # a standalone "好" with no context — agent can't tell what they agreed to.
-    if isinstance(quoted, dict):
+    # For poll votes: skip quote injection (the "quoted" is the poll message,
+    # not a conversational reply) and use empty text (resolved later by router).
+    if is_poll_vote:
+        text = ""
+    elif isinstance(quoted, dict):
+        # Inject quoted text into the message so the agent has full context.
+        # Without this, a reply of "好" to the bot's soup recipe looks like
+        # a standalone "好" with no context — agent can't tell what they agreed to.
         quoted_text = (quoted.get("text") or "").strip()
         if quoted_text:
             prefix = "[回覆你講嘅]" if quoted_from_me else "[引用]"
@@ -259,4 +268,6 @@ def parse_webhook(payload: dict) -> ChatDaddyMessage | None:
         mentioned_jids=mentioned_jids,
         sender_contact_id=sender_contact_id,
         quoted_from_me=quoted_from_me,
+        is_poll_vote=is_poll_vote,
+        poll_msg_id=poll_msg_id,
     )

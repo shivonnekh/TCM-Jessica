@@ -493,6 +493,76 @@ def _merge_tiny(
 # Cleanup
 # ---------------------------------------------------------------------------
 
+async def fetch_poll_selection(
+    account_id: str,
+    chat_id: str,
+    poll_msg_id: str,
+) -> str:
+    """Re-fetch the chat and find which poll option was voted for.
+
+    When a user votes on a WhatsApp poll, ChatDaddy fires a vote-notification
+    webhook with no selection data. The selection is recoverable by re-fetching
+    the original poll message — ChatDaddy updates it with vote counts.
+
+    Approach:
+      1. GET /im/messages/{accountId}/{chatId}?count=20
+      2. Find the message whose id == poll_msg_id
+      3. Return the first option with votes > 0, or the only non-zero option
+
+    Returns the selected option text (e.g. "B. 正常，偶爾攰") or "" if
+    the selection can't be determined.
+    """
+    from urllib.parse import quote as _quote
+
+    token = await get_token()
+    url = f"{CHATDADDY_IM_API}/{_quote(account_id, safe='')}/{_quote(chat_id, safe='')}"
+    http = _get_http()
+
+    try:
+        resp = await asyncio.wait_for(
+            http.get(
+                url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "accept": "application/json",
+                },
+                params={"count": 20},
+            ),
+            timeout=10.0,
+        )
+    except Exception as exc:
+        logger.warning("fetch_poll_selection: API call failed: %s", exc)
+        return ""
+
+    if not resp.is_success:
+        logger.warning("fetch_poll_selection: API %d for %s", resp.status_code, poll_msg_id)
+        return ""
+
+    data = resp.json()
+    messages = data.get("messages") or (data if isinstance(data, list) else [])
+
+    for msg in messages:
+        if msg.get("id") != poll_msg_id:
+            continue
+        poll = msg.get("poll") or {}
+        options = poll.get("options") or []
+        # Find option(s) with votes > 0
+        voted = [
+            o.get("text", "").strip()
+            for o in options
+            if isinstance(o, dict) and int(o.get("votes") or 0) > 0
+        ]
+        if voted:
+            logger.info("fetch_poll_selection: resolved %r for msg %s", voted[0], poll_msg_id[-20:])
+            return voted[0]
+        # Fallback: if votes field isn't populated yet, return empty
+        logger.warning("fetch_poll_selection: poll msg found but no votes > 0 yet")
+        return ""
+
+    logger.warning("fetch_poll_selection: poll msg %s not found in recent messages", poll_msg_id[-20:])
+    return ""
+
+
 async def close() -> None:
     """Close the httpx client."""
     global _http

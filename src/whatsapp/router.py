@@ -851,7 +851,29 @@ async def chatdaddy_webhook(request: Request) -> JSONResponse:
         logger.debug("Duplicate message %s — skipping", msg.message_id)
         return JSONResponse({"status": "duplicate"})
 
-    # 5. Must have text or attachments
+    # 5a. Poll vote resolution — "A new vote was cast in this poll" arrives
+    # with no selection data. Re-fetch the original poll message from ChatDaddy
+    # to find which option was voted for, then treat it as a normal text message.
+    if msg.is_poll_vote:
+        if not msg.poll_msg_id:
+            logger.info("[poll] vote notification has no poll_msg_id — skipping")
+            return JSONResponse({"status": "poll_vote_no_ref"})
+        account_id_for_poll = msg.account_id or DEFAULT_ACCOUNT_ID
+        selected = await client.fetch_poll_selection(
+            account_id=account_id_for_poll,
+            chat_id=msg.chat_id,
+            poll_msg_id=msg.poll_msg_id,
+        )
+        if not selected:
+            logger.info("[poll] could not resolve selection for poll %s — skipping", msg.poll_msg_id[-20:])
+            return JSONResponse({"status": "poll_vote_unresolved"})
+        logger.info("[poll] resolved vote: %r for %s", selected, msg.phone)
+        # Rebuild msg with the resolved text so the rest of the pipeline
+        # treats it as a normal MCQ answer.
+        import dataclasses as _dc
+        msg = _dc.replace(msg, text=selected, is_poll_vote=False)
+
+    # 5b. Must have text or attachments
     has_text = bool(msg.text.strip())
     has_media = len(msg.attachments) > 0
     if not has_text and not has_media:
