@@ -99,6 +99,46 @@ class ChatDaddyMessage:
         return f"wa_{self.phone}"
 
 
+def _extract_poll_selection(msg: dict) -> str:
+    """Extract the selected option text from a ChatDaddy poll vote message.
+
+    ChatDaddy sends poll votes in several shapes depending on API version:
+      1. msg.vote.selectedOptions = ["B. 正常，偶爾攰"]
+      2. msg.pollUpdates[0].selectedOptions = ["B. 正常，偶爾攰"]
+      3. msg.selectedOptions = ["B. 正常，偶爾攰"]
+      4. msg.text already contains the option (some versions send it directly)
+
+    Returns the first selected option string, or "" if unrecognised.
+    """
+    # Shape 1: msg.vote
+    vote = msg.get("vote")
+    if isinstance(vote, dict):
+        opts = vote.get("selectedOptions") or vote.get("options") or []
+        if opts and isinstance(opts, list):
+            return str(opts[0]).strip()
+
+    # Shape 2: msg.pollUpdates (array)
+    poll_updates = msg.get("pollUpdates")
+    if isinstance(poll_updates, list) and poll_updates:
+        first = poll_updates[0]
+        if isinstance(first, dict):
+            opts = first.get("selectedOptions") or first.get("options") or []
+            if opts and isinstance(opts, list):
+                return str(opts[0]).strip()
+
+    # Shape 3: msg.selectedOptions
+    selected = msg.get("selectedOptions")
+    if isinstance(selected, list) and selected:
+        return str(selected[0]).strip()
+
+    # Shape 4: text already populated
+    text = (msg.get("text") or "").strip()
+    if text:
+        return text
+
+    return ""
+
+
 def _parse_timestamp(raw: str | int | float) -> int:
     """Parse a timestamp that may be Unix int/float or ISO 8601 string."""
     if isinstance(raw, (int, float)):
@@ -133,13 +173,26 @@ def parse_webhook(payload: dict) -> ChatDaddyMessage | None:
     if not isinstance(msg, dict):
         return None
 
-    # Drop poll vote notifications — when ChatDaddy sends a button-style
-    # poll (4+ options), each vote fires a separate message-insert event
-    # with messageType="poll_update" or a non-empty "vote" field.
-    # These are NOT user messages — processing them breaks MCQ state.
+    # Poll vote handling — when a user votes on a WhatsApp poll, ChatDaddy
+    # fires a message-insert with messageType="pollUpdateMessage" and an
+    # empty text field. We extract the selected option so the MCQ state
+    # machine can process it as a normal A/B/C/D answer.
     msg_type = (msg.get("messageType") or msg.get("type") or "").lower()
-    if "poll" in msg_type or "vote" in msg_type or msg.get("vote"):
-        return None
+    is_poll_vote = (
+        "poll" in msg_type
+        or "vote" in msg_type
+        or bool(msg.get("vote"))
+        or bool(msg.get("pollUpdates"))
+        or bool(msg.get("selectedOptions"))
+    )
+    if is_poll_vote:
+        selected = _extract_poll_selection(msg)
+        if not selected:
+            # Unknown poll vote format — capture but don't process
+            return None
+        # Inject selected option as text so the rest of the pipeline
+        # treats it as a regular user message (MCQ answer).
+        msg = {**msg, "text": selected, "messageType": "text"}
 
     message_id = msg.get("id") or payload.get("id") or ""
     chat_id = msg.get("chatId") or msg.get("senderContactId") or ""
