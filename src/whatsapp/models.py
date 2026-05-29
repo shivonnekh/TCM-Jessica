@@ -20,11 +20,6 @@ class ChatDaddyMessage:
     timestamp: int          # Unix seconds
     sender_name: str = ""   # data[0].pushName or ""
     attachments: tuple[dict, ...] = field(default_factory=tuple)
-    # Poll vote fields — set when this message is a poll vote notification.
-    # Router calls client.fetch_poll_selection(account_id, chat_id, poll_msg_id)
-    # to resolve the selected option, then reprocesses as a normal MCQ answer.
-    is_poll_vote: bool = False
-    poll_msg_id: str = ""   # quoted.id — the original poll message to look up
     # Group-chat support — in group chats, chat_id is the group JID and
     # the actual sender is in sender_contact_id. mentioned_jids lists the
     # JIDs explicitly @-tagged in this message — but in practice ChatDaddy
@@ -104,46 +99,6 @@ class ChatDaddyMessage:
         return f"wa_{self.phone}"
 
 
-def _extract_poll_selection(msg: dict) -> str:
-    """Extract the selected option text from a ChatDaddy poll vote message.
-
-    ChatDaddy sends poll votes in several shapes depending on API version:
-      1. msg.vote.selectedOptions = ["B. 正常，偶爾攰"]
-      2. msg.pollUpdates[0].selectedOptions = ["B. 正常，偶爾攰"]
-      3. msg.selectedOptions = ["B. 正常，偶爾攰"]
-      4. msg.text already contains the option (some versions send it directly)
-
-    Returns the first selected option string, or "" if unrecognised.
-    """
-    # Shape 1: msg.vote
-    vote = msg.get("vote")
-    if isinstance(vote, dict):
-        opts = vote.get("selectedOptions") or vote.get("options") or []
-        if opts and isinstance(opts, list):
-            return str(opts[0]).strip()
-
-    # Shape 2: msg.pollUpdates (array)
-    poll_updates = msg.get("pollUpdates")
-    if isinstance(poll_updates, list) and poll_updates:
-        first = poll_updates[0]
-        if isinstance(first, dict):
-            opts = first.get("selectedOptions") or first.get("options") or []
-            if opts and isinstance(opts, list):
-                return str(opts[0]).strip()
-
-    # Shape 3: msg.selectedOptions
-    selected = msg.get("selectedOptions")
-    if isinstance(selected, list) and selected:
-        return str(selected[0]).strip()
-
-    # Shape 4: text already populated
-    text = (msg.get("text") or "").strip()
-    if text:
-        return text
-
-    return ""
-
-
 def _parse_timestamp(raw: str | int | float) -> int:
     """Parse a timestamp that may be Unix int/float or ISO 8601 string."""
     if isinstance(raw, (int, float)):
@@ -177,27 +132,6 @@ def parse_webhook(payload: dict) -> ChatDaddyMessage | None:
     msg = data_list[0]
     if not isinstance(msg, dict):
         return None
-
-    # Poll vote detection — ChatDaddy sends "A new vote was cast in this poll"
-    # as a message-insert when a user votes on a poll. The actual selection
-    # is NOT in the webhook payload; it must be resolved by re-fetching the
-    # original poll message from the REST API (client.fetch_poll_selection).
-    # We flag it here and let the router handle the async resolution.
-    msg_type = (msg.get("messageType") or msg.get("type") or "").lower()
-    text_raw = (msg.get("text") or "").strip()
-    is_poll_vote = (
-        "poll" in msg_type
-        or "vote" in msg_type
-        or bool(msg.get("vote"))
-        or bool(msg.get("pollUpdates"))
-        or bool(msg.get("selectedOptions"))
-        or "a new vote was cast" in text_raw.lower()
-    )
-    poll_msg_id = ""
-    if is_poll_vote:
-        quoted = msg.get("quoted") or {}
-        poll_msg_id = str(quoted.get("id") or "").strip()
-        # Clear the generic notification text so it isn't passed to agents
 
     message_id = msg.get("id") or payload.get("id") or ""
     chat_id = msg.get("chatId") or msg.get("senderContactId") or ""
@@ -236,14 +170,10 @@ def parse_webhook(payload: dict) -> ChatDaddyMessage | None:
         isinstance(quoted, dict) and quoted.get("fromMe")
     )
 
-    # For poll votes: skip quote injection (the "quoted" is the poll message,
-    # not a conversational reply) and use empty text (resolved later by router).
-    if is_poll_vote:
-        text = ""
-    elif isinstance(quoted, dict):
-        # Inject quoted text into the message so the agent has full context.
-        # Without this, a reply of "好" to the bot's soup recipe looks like
-        # a standalone "好" with no context — agent can't tell what they agreed to.
+    # Inject quoted text into the message so the agent has full context.
+    # Without this, a reply of "好" to the bot's soup recipe looks like
+    # a standalone "好" with no context — agent can't tell what they agreed to.
+    if isinstance(quoted, dict):
         quoted_text = (quoted.get("text") or "").strip()
         if quoted_text:
             prefix = "[回覆你講嘅]" if quoted_from_me else "[引用]"
@@ -268,6 +198,4 @@ def parse_webhook(payload: dict) -> ChatDaddyMessage | None:
         mentioned_jids=mentioned_jids,
         sender_contact_id=sender_contact_id,
         quoted_from_me=quoted_from_me,
-        is_poll_vote=is_poll_vote,
-        poll_msg_id=poll_msg_id,
     )

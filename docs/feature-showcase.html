@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jessica AI — 新功能展示</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      padding: 24px 16px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.6rem;
+      margin-bottom: 6px;
+      color: #2d6a4f;
+    }
+    .subtitle {
+      text-align: center;
+      color: #555;
+      font-size: 0.92rem;
+      margin-bottom: 32px;
+    }
+
+    .badge-row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 36px;
+    }
+    .badge {
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .badge-green  { background: #d8f3dc; color: #1b4332; }
+    .badge-purple { background: #e9d5ff; color: #4c1d95; }
+    .badge-blue   { background: #dbeafe; color: #1e40af; }
+    .badge-orange { background: #fde68a; color: #78350f; }
+
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #888;
+      margin: 36px 0 12px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+
+    .card-header {
+      padding: 16px 20px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .card-icon {
+      font-size: 2rem;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .card-meta { flex: 1; }
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+    .card-subtitle {
+      font-size: 0.8rem;
+      color: #666;
+      margin-top: 2px;
+    }
+    .card-type {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 2px 8px;
+      border-radius: 6px;
+      margin-top: 6px;
+      display: inline-block;
+    }
+    .type-broadcast { background: #fde68a; color: #78350f; }
+    .type-conv      { background: #d8f3dc; color: #1b4332; }
+    .type-memory    { background: #e0e7ff; color: #3730a3; }
+
+    .trigger-box {
+      margin: 0 20px 14px;
+      background: #f8fafc;
+      border-left: 3px solid #94a3b8;
+      border-radius: 0 8px 8px 0;
+      padding: 10px 14px;
+    }
+    .trigger-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+    .trigger-item {
+      font-size: 0.83rem;
+      color: #374151;
+      padding: 2px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .trigger-item::before { content: "→"; color: #94a3b8; flex-shrink: 0; }
+
+    .preview-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin: 0 20px 8px;
+    }
+
+    /* WhatsApp-style phone mock */
+    .wa-mock {
+      background: #ece5dd;
+      margin: 0 20px 20px;
+      border-radius: 12px;
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* User message bubble (right, green) */
+    .wa-user {
+      align-self: flex-end;
+      max-width: 82%;
+    }
+    .wa-user .bubble {
+      background: #d9fdd3;
+      border-radius: 10px 2px 10px 10px;
+      padding: 8px 10px;
+      font-size: 0.83rem;
+      line-height: 1.45;
+      color: #111;
+      position: relative;
+    }
+    .wa-user .meta {
+      text-align: right;
+      font-size: 0.68rem;
+      color: #667;
+      margin-top: 3px;
+    }
+
+    /* Jessica message bubble (left, white) */
+    .wa-jessica {
+      align-self: flex-start;
+      max-width: 86%;
+    }
+    .wa-jessica .sender {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #2d6a4f;
+      margin-bottom: 2px;
+      padding-left: 2px;
+    }
+    .wa-jessica .bubble {
+      background: #fff;
+      border-radius: 2px 10px 10px 10px;
+      padding: 8px 10px;
+      font-size: 0.83rem;
+      line-height: 1.5;
+      color: #111;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+    .wa-jessica .bubble + .bubble {
+      margin-top: 3px;
+      border-radius: 10px;
+    }
+    .wa-jessica .meta {
+      font-size: 0.68rem;
+      color: #667;
+      margin-top: 3px;
+      padding-left: 2px;
+    }
+
+    /* Proactive message (no user message above) */
+    .wa-proactive-tag {
+      text-align: center;
+      font-size: 0.7rem;
+      color: #888;
+      background: rgba(255,255,255,0.6);
+      border-radius: 8px;
+      padding: 4px 10px;
+      align-self: center;
+    }
+
+    .test-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 20px 16px;
+      padding: 8px 12px;
+      background: #f0fdf4;
+      border-radius: 8px;
+      border: 1px solid #bbf7d0;
+    }
+    .test-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+    .test-text { font-size: 0.78rem; color: #166534; }
+
+    .stats-row {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 36px;
+      flex-wrap: wrap;
+    }
+    .stat { text-align: center; }
+    .stat-num { font-size: 2rem; font-weight: 800; color: #2d6a4f; }
+    .stat-label { font-size: 0.78rem; color: #666; margin-top: 2px; }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 0.78rem;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🌿 Jessica AI — 新功能展示</h1>
+<p class="subtitle">心宜中醫 Care Plus &nbsp;·&nbsp; 2026-05-25 &nbsp;·&nbsp; 全部 387 tests ✅</p>
+
+<div class="stats-row">
+  <div class="stat"><div class="stat-num">387</div><div class="stat-label">Tests 全部 pass</div></div>
+  <div class="stat"><div class="stat-num">10</div><div class="stat-label">廣播頻道</div></div>
+  <div class="stat"><div class="stat-num">6</div><div class="stat-label">今次新 features</div></div>
+  <div class="stat"><div class="stat-num">74</div><div class="stat-label">新增 tests</div></div>
+</div>
+
+<div class="badge-row">
+  <span class="badge badge-orange">廣播類 — Jessica 主動發</span>
+  <span class="badge badge-green">對話類 — 用戶說觸發</span>
+  <span class="badge badge-purple">記憶類 — 跨 session 感知</span>
+</div>
+
+
+<!-- ─── SECTION: 廣播類 ─── -->
+<div class="section-label">📡 廣播類 Broadcasts — Jessica 主動發送，不需用戶先說話</div>
+<div class="grid">
+
+  <!-- 1. 穴位週報 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">🤚</div>
+      <div class="card-meta">
+        <div class="card-title">穴位週報</div>
+        <div class="card-subtitle">Weekly Acupressure Tip</div>
+        <span class="card-type type-broadcast">廣播 · 每週一次</span>
+      </div>
+    </div>
+    <div class="trigger-box">
+      <div class="trigger-label">觸發條件</div>
+      <div class="trigger-item">每個 ISO 週首次觸達，全部活躍用戶</div>
+      <div class="trigger-item">根據用戶 pain_points 選擇穴位類別：</div>
+      <div class="trigger-item">頭痛/肩頸/腰痛 → 痛症穴位（合谷）</div>
+      <div class="trigger-item">失眠/壓力/焦慮 → 安神穴位（神門）</div>
+      <div class="trigger-item">皮膚/美容 → 美顏穴位（足三里）</div>
+      <div class="trigger-item">肥胖/消腫 → 祛濕穴位（豐隆）</div>
+    </div>
+    <div class="test-row">
+      <div class="test-dot"></div>
+      <div class="test-text">10/10 tests passed · dedup key: acupressure-{iso_week}</div>
+    </div>
+    <div class="preview-label">實際回覆範例（有頭痛記錄的用戶）</div>
+    <div class="wa-mock">
+      <div class="wa-proactive-tag">Jessica 主動發送</div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">今週穴位：合谷穴 👋 喺虎口位置，用拇指按壓 1 分鐘，有助緩解頭痛同肩頸痛！</div>
+        <div class="meta">22:01 ✓✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 每月食療 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">🍐</div>
+      <div class="card-meta">
+        <div class="card-title">每月食療提示</div>
+        <div class="card-subtitle">Monthly Food Pairing Tip</div>
+        <span class="card-type type-broadcast">廣播 · 每月一次</span>
+      </div>
+    </div>
+    <div class="trigger-box">
+      <div class="trigger-label">觸發條件</div>
+      <div class="trigger-item">每個曆月首次觸達，全部活躍用戶</div>
+      <div class="trigger-item">Dedup key：food-{year}-{month}</div>
+      <div class="trigger-item">根據體質 × 季節配對食材</div>
+      <div class="trigger-item">夏（6-8月）→ 消暑祛濕食材</div>
+      <div class="trigger-item">秋（9-11月）→ 潤肺滋陰食材</div>
+      <div class="trigger-item">冬（12-2月）→ 補腎暖身食材</div>
+    </div>
+    <div class="test-row">
+      <div class="test-dot"></div>
+      <div class="test-text">10/10 tests passed · 4 seasons × constitution mapping</div>
+    </div>
+    <div class="preview-label">實際回覆範例（秋季用戶）</div>
+    <div class="wa-mock">
+      <div class="wa-proactive-tag">Jessica 主動發送</div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">秋季宜多食梨、百合、銀耳潤肺滋陰 🍐 少食辛辣，保持肺部滋潤！</div>
+        <div class="meta">22:01 ✓✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 睡眠養生週報 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">💤</div>
+      <div class="card-meta">
+        <div class="card-title">睡眠養生週報</div>
+        <div class="card-subtitle">Weekly Sleep Wellness Tip</div>
+        <span class="card-type type-broadcast">廣播 · 每週一次</span>
+      </div>
+    </div>
+    <div class="trigger-box">
+      <div class="trigger-label">觸發條件</div>
+      <div class="trigger-item">每個 ISO 週首次觸達，全部活躍用戶</div>
+      <div class="trigger-item">Dedup key：sleep-{iso_week}</div>
+      <div class="trigger-item">根據體質個人化 TCM 睡眠建議</div>
+      <div class="trigger-item">腎虛/陽虛 → 子時前入睡、泡腳</div>
+      <div class="trigger-item">氣鬱質 → 深呼吸、舒展肝氣</div>
+      <div class="trigger-item">其他/未知 → 子時（11pm）前入睡</div>
+    </div>
+    <div class="test-row">
+      <div class="test-dot"></div>
+      <div class="test-text">10/10 tests passed · time-independent mocking</div>
+    </div>
+    <div class="preview-label">實際回覆範例（陽虛質用戶）</div>
+    <div class="wa-mock">
+      <div class="wa-proactive-tag">Jessica 主動發送</div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">陽虛體質宜睡前用熱水泡腳15分鐘 🦶 加幾片薑，溫陽助眠效果好好！</div>
+        <div class="meta">22:01 ✓✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 每周茶飲 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">🫖</div>
+      <div class="card-meta">
+        <div class="card-title">每周 DIY 茶飲配方</div>
+        <div class="card-subtitle">Weekly DIY Tea Recipe</div>
+        <span class="card-type type-broadcast">廣播 · 每週一次</span>
+      </div>
+    </div>
+    <div class="trigger-box">
+      <div class="trigger-label">觸發條件</div>
+      <div class="trigger-item">每個 ISO 週首次觸達，全部活躍用戶</div>
+      <div class="trigger-item">Dedup key：tea-{iso_week}</div>
+      <div class="trigger-item">根據體質推薦家用茶方（超市可買材料）</div>
+      <div class="trigger-item">陽虛/氣虛 → 薑棗茶（暖胃驅寒）</div>
+      <div class="trigger-item">陰虛/濕熱 → 菊花枸杞茶（清肝明目）</div>
+      <div class="trigger-item">氣鬱/血瘀 → 玫瑰花茶（疏肝解鬱）</div>
+      <div class="trigger-item">平和/未知 → 茉莉花茶（性平提神）</div>
+    </div>
+    <div class="test-row">
+      <div class="test-dot"></div>
+      <div class="test-text">18/18 tests passed · 4 constitution groups</div>
+    </div>
+    <div class="preview-label">實際回覆範例（氣鬱質用戶）</div>
+    <div class="wa-mock">
+      <div class="wa-proactive-tag">Jessica 主動發送</div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">氣鬱體質今週飲佛手柑茶 🌿 疏肝解鬱，令心情輕鬆啲 😊</div>
+        <div class="meta">22:01 ✓✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. 月事陪伴 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">🌹</div>
+      <div class="card-meta">
+        <div class="card-title">月事陪伴</div>
+        <div class="card-subtitle">Menstrual Phase Care</div>
+        <span class="card-type type-broadcast">廣播 · 每週一次</span>
+      </div>
+    </div>
+    <div class="trigger-box">
+      <div class="trigger-label">觸發條件</div>
+      <div class="trigger-item">用戶 CRM 有記錄 last_period_start（已知週期）</div>
+      <div class="trigger-item">系統自動計算今日屬哪個月事週期</div>
+      <div class="trigger-item">行經期（第1-5天）→ 避寒、活血通暢</div>
+      <div class="trigger-item">經後期（第6-13天）→ 養血補陰、補充精氣</div>
+      <div class="trigger-item">排卵期（第14-16天）→ 保暖、避免過勞</div>
+      <div class="trigger-item">黃體期（第17-28天）→ 疏肝解鬱、情緒調節</div>
+    </div>
+    <div class="test-row">
+      <div class="test-dot"></div>
+      <div class="test-text">25/25 tests passed · 10 phase calculation tests · CRM fields added</div>
+    </div>
+    <div class="preview-label">實際回覆範例（黃體期）</div>
+    <div class="wa-mock">
+      <div class="wa-proactive-tag">Jessica 主動發送</div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">經前一兩週，情緒容易波動係正常嘅 💕 可以試下玫瑰花茶或者菊花茶疏肝解鬱，心情自然好啲。</div>
+        <div class="meta">22:01 ✓✓</div>
+      </div>
+    </div>
+    <div class="preview-label">實際回覆範例（行經期）</div>
+    <div class="wa-mock">
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">行經期間記得多休息 🌹 避免生冷食物同劇烈運動，用熱水袋暖小腹有助緩解不適。</div>
+        <div class="meta">22:01 ✓✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. 問診準備 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">🏥</div>
+      <div class="card-meta">
+        <div class="card-title">問診準備助手</div>
+        <div class="card-subtitle">Pre-Appointment Prep Broadcast</div>
+        <span class="card-type type-broadcast">廣播 · 預約前觸發</span>
+      </div>
+    </div>
+    <div class="trigger-box">
+      <div class="trigger-label">觸發條件</div>
+      <div class="trigger-item">用戶 CRM 有診所預約記錄</div>
+      <div class="trigger-item">預約時間在未來 48 小時內</div>
+      <div class="trigger-item">該週未發送過 appt-prep 訊息</div>
+      <div class="trigger-item">內容：體質提醒 + 近期症狀 + 就診小貼士</div>
+    </div>
+    <div class="test-row">
+      <div class="test-dot"></div>
+      <div class="test-text">10/10 tests passed · triggers via list_phones_for_upcoming_appointments</div>
+    </div>
+    <div class="preview-label">實際回覆範例</div>
+    <div class="wa-mock">
+      <div class="wa-proactive-tag">預約前 48 小時自動發送</div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">聽日見醫師！🌿 你係氣虛質，最近提過唔夠瞓同易攰。見醫師時記得提呢幾點，幫醫師更準確咁了解你嘅情況。</div>
+        <div class="bubble">唔使特別空腹，但最好唔好趕住食嘢 😊 如果有舊病歷或藥物清單可以帶埋。加油！</div>
+        <div class="meta">22:01 ✓✓</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end broadcast grid -->
+
+
+<!-- ─── SECTION: 對話類 ─── -->
+<div class="section-label">💬 對話類 Conversational — 用戶說特定嘢時觸發</div>
+<div class="grid">
+
+  <!-- 7. 情志調理 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">🧘</div>
+      <div class="card-meta">
+        <div class="card-title">情志調理</div>
+        <div class="card-subtitle">TCM Emotional Wellness — 七情對應五臟</div>
+        <span class="card-type type-conv">對話觸發 · CASUAL + FAQ 並行</span>
+      </div>
+    </div>
+    <div class="trigger-box">
+      <div class="trigger-label">觸發關鍵字（Planner Rule）</div>
+      <div class="trigger-item"><strong>思 → 脾：</strong>好大壓力、諗嘢諗唔停、焦慮、煩惱</div>
+      <div class="trigger-item"><strong>怒 → 肝：</strong>好嬲、激嬲、忟憎、火大、肝火</div>
+      <div class="trigger-item"><strong>悲 → 肺：</strong>好難過、好傷心、情緒低落、唔開心</div>
+      <div class="trigger-item"><strong>恐 → 腎：</strong>失眠、好驚、心跳好快、好緊張</div>
+      <div class="trigger-item">Routing：[CASUAL, FAQ] 並行 → Writer 整合</div>
+    </div>
+    <div class="test-row">
+      <div class="test-dot"></div>
+      <div class="test-text">29/29 tests passed · 4 emotion groups · organ mapping verified</div>
+    </div>
+    <div class="preview-label">實際對話範例（壓力 → 思傷脾）</div>
+    <div class="wa-mock">
+      <div class="wa-user">
+        <div class="bubble">好大壓力，諗嘢諗唔停，瞓都瞓唔著 😞</div>
+        <div class="meta">21:58 ✓</div>
+      </div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">係呀，香港打工仔真係壓力好大 🤍 你描述嘅感覺，中醫角度係「思慮過度傷脾」——諗太多令脾胃都受影響。</div>
+        <div class="bubble">你有冇試過食完嘢唔消化、或者肚脹嘅感覺？如果係，係脾氣受損嘅信號喎。平時可以試下健脾益氣、安神定志嘅養生方向 🌿</div>
+        <div class="meta">21:59 ✓✓</div>
+      </div>
+    </div>
+    <div class="preview-label">實際對話範例（憤怒 → 怒傷肝）</div>
+    <div class="wa-mock">
+      <div class="wa-user">
+        <div class="bubble">好嬲，激嬲到，今日真係發晒脾氣</div>
+        <div class="meta">21:58 ✓</div>
+      </div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">唉，發生咩事？中醫話「怒傷肝」，情緒激動時肝氣特別容易鬱結 😮‍💨</div>
+        <div class="bubble">最近有冇兩側頭痛、眼睛乾澀，或者胸口覺得悶？如果有，試下疏肝解鬱嘅方向，例如玫瑰花茶或者合歡花茶 🌹</div>
+        <div class="meta">21:59 ✓✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. 症狀記憶 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">🧠</div>
+      <div class="card-meta">
+        <div class="card-title">症狀記憶</div>
+        <div class="card-subtitle">Recurring Symptom Pattern Detection</div>
+        <span class="card-type type-memory">跨 Session 記憶 · 閾值 3 次</span>
+      </div>
+    </div>
+    <div class="trigger-box">
+      <div class="trigger-label">觸發條件（Planner 最低優先級 Rule）</div>
+      <div class="trigger-item">掃描最近 10 條用戶訊息（非 Jessica 訊息）</div>
+      <div class="trigger-item">同一症狀出現 ≥ 3 次 → 觸發</div>
+      <div class="trigger-item">監控 8 大症狀類別：</div>
+      <div class="trigger-item">頭痛 / 失眠 / 肩頸痛 / 胃痛消化差</div>
+      <div class="trigger-item">疲勞 / 皮膚問題 / 情緒低落 / 腰痛</div>
+      <div class="trigger-item">Routing：[CASUAL, FAQ] 並行，notes 提醒 Writer 溫柔提及</div>
+      <div class="trigger-item">優先級最低：其他所有 Rule 先；冇 Rule 觸發先輪到佢</div>
+    </div>
+    <div class="test-row">
+      <div class="test-dot"></div>
+      <div class="test-text">17/17 tests passed · threshold=3 · ignores Jessica messages</div>
+    </div>
+    <div class="preview-label">實際對話範例（頭痛出現 3 次後）</div>
+    <div class="wa-mock">
+      <div class="wa-user">
+        <div class="bubble">頭好痛，唔知點</div>
+        <div class="meta">21:55 ✓ &nbsp;← 第1次</div>
+      </div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">係咩類型嘅痛？ ...</div>
+        <div class="meta">21:55 ✓✓</div>
+      </div>
+      <div class="wa-user">
+        <div class="bubble">頭痛又返嚟</div>
+        <div class="meta">隔日 ✓ &nbsp;← 第2次</div>
+      </div>
+      <div class="wa-user">
+        <div class="bubble">今日又係頭痛，好煩</div>
+        <div class="meta">再隔日 ✓ &nbsp;← 第3次（觸發！）</div>
+      </div>
+      <div class="wa-jessica">
+        <div class="sender">Jessica</div>
+        <div class="bubble">你最近好似幾次都有提到頭痛 🤍 係咪一直有呢個困擾？想多了解一下你嘅情況，睇下係咩類型——壓力性？還是睡眠唔夠？</div>
+        <div class="bubble">中醫角度，持續頭痛可能同肝氣鬱結或者腎氣不足有關。你有冇一齊試下做個體質評估？</div>
+        <div class="meta">22:01 ✓✓</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end conversational grid -->
+
+
+<!-- ─── SECTION: 系統廣播頻道總覽 ─── -->
+<div class="section-label">📋 廣播頻道總覽（start_broadcast_loop）</div>
+<div class="card" style="max-width:700px; margin: 0 auto;">
+  <div style="padding: 20px;">
+    <table style="width:100%; border-collapse:collapse; font-size:0.83rem;">
+      <thead>
+        <tr style="border-bottom:2px solid #e5e7eb;">
+          <th style="text-align:left; padding:8px 12px; color:#666;">頻道</th>
+          <th style="text-align:left; padding:8px 12px; color:#666;">Dedup Key</th>
+          <th style="text-align:left; padding:8px 12px; color:#666;">對象</th>
+          <th style="text-align:left; padding:8px 12px; color:#666;">頻率</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:8px 12px;">🌦 天氣關心</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">iso_week</td>
+          <td style="padding:8px 12px;">全部（有天氣事件）</td>
+          <td style="padding:8px 12px;">2次/週上限</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6; background:#fafafa;">
+          <td style="padding:8px 12px;">💊 購買追蹤</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">iso_week</td>
+          <td style="padding:8px 12px;">有購買 + 靜音3天</td>
+          <td style="padding:8px 12px;">30天1次</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:8px 12px;">🌿 節氣養生</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">{year}-{term}</td>
+          <td style="padding:8px 12px;">全部</td>
+          <td style="padding:8px 12px;">24節氣各1次</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6; background:#fafafa;">
+          <td style="padding:8px 12px;">🔄 體質複查</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">iso_week</td>
+          <td style="padding:8px 12px;">體質評估90天後</td>
+          <td style="padding:8px 12px;">90天1次</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:8px 12px;">🫖 每週茶飲</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">tea-{iso_week}</td>
+          <td style="padding:8px 12px;">全部活躍</td>
+          <td style="padding:8px 12px;">1次/週</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6; background:#fafafa;">
+          <td style="padding:8px 12px;">🤚 穴位週報</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">acupressure-{iso_week}</td>
+          <td style="padding:8px 12px;">全部活躍</td>
+          <td style="padding:8px 12px;">1次/週</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:8px 12px;">🏥 問診準備</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">appt-prep-{iso_week}</td>
+          <td style="padding:8px 12px;">有預約（48小時內）</td>
+          <td style="padding:8px 12px;">每次預約前</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6; background:#fafafa;">
+          <td style="padding:8px 12px;">🍐 每月食療</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">food-{year}-{mm}</td>
+          <td style="padding:8px 12px;">全部活躍</td>
+          <td style="padding:8px 12px;">1次/月</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:8px 12px;">💤 睡眠養生</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">sleep-{iso_week}</td>
+          <td style="padding:8px 12px;">全部活躍</td>
+          <td style="padding:8px 12px;">1次/週</td>
+        </tr>
+        <tr style="background:#f0fdf4;">
+          <td style="padding:8px 12px;">🌹 月事陪伴</td>
+          <td style="padding:8px 12px; font-family:monospace; font-size:0.75rem; color:#7c3aed;">menstrual-{iso_week}</td>
+          <td style="padding:8px 12px;">有週期記錄的用戶</td>
+          <td style="padding:8px 12px;">1次/週</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:14px; font-size:0.78rem; color:#666; line-height:1.6;">
+      ⚙️ 全部廣播共用同一個 <code style="background:#f1f5f9; padding:1px 5px; border-radius:4px;">start_broadcast_loop()</code>，每 6 小時跑一次。
+      發送窗口：08:00–21:00 HKT。所有廣播有獨立 dedup key，互不影響配額。
+    </div>
+  </div>
+</div>
+
+
+<footer>
+  TCM-Jessica · 心宜中醫 Care Plus · 全部 387 tests ✅ · 2026-05-25
+</footer>
+
+</body>
+</html>

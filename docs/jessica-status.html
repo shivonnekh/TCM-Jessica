@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCM Jessica — 現狀 + 中醫建議</title>
+<style>
+  :root {
+    --green: #2d6a4f;
+    --green-light: #52b788;
+    --green-pale: #d8f3dc;
+    --amber: #e76f51;
+    --amber-pale: #fde8e0;
+    --gold: #b5850a;
+    --gold-pale: #fef3c7;
+    --blue: #264653;
+    --blue-light: #457b9d;
+    --blue-pale: #e8f4f8;
+    --purple: #6b3fa0;
+    --purple-pale: #ede7f6;
+    --gray: #6b7280;
+    --gray-pale: #f3f4f6;
+    --text: #1a1a2e;
+    --border: #e5e7eb;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang HK', sans-serif;
+    background: #f8faf9;
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 14px;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, var(--green) 0%, #40916c 100%);
+    color: white;
+    padding: 36px 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: "🌿";
+    position: absolute;
+    font-size: 160px;
+    right: 40px;
+    top: -20px;
+    opacity: 0.08;
+  }
+  .header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .header p { opacity: 0.85; margin-top: 6px; font-size: 13px; }
+  .header .badges { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .badge {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .two-col, .three-col { grid-template-columns: 1fr; } }
+
+  /* ── Section headings ── */
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--gray);
+    margin: 32px 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: white;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 14px 18px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card-header h3 { font-size: 14px; font-weight: 600; }
+  .card-header .icon { font-size: 18px; }
+  .card-body { padding: 16px 18px; }
+
+  /* ── Agent chips ── */
+  .agent-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .agent-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1.5px solid transparent;
+  }
+  .chip-green { background: var(--green-pale); color: var(--green); border-color: #b7e4c7; }
+  .chip-blue  { background: var(--blue-pale); color: var(--blue); border-color: #c7dff0; }
+  .chip-gold  { background: var(--gold-pale); color: var(--gold); border-color: #fde68a; }
+  .chip-amber { background: var(--amber-pale); color: var(--amber); border-color: #fcc9b5; }
+  .chip-purple{ background: var(--purple-pale); color: var(--purple); border-color: #d4bbf5; }
+
+  /* ── Knowledge base ── */
+  .kb-domain { margin-bottom: 16px; }
+  .kb-domain-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--gray);
+    margin-bottom: 8px;
+  }
+  .kb-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .kb-tag {
+    background: var(--gray-pale);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: #4b5563;
+  }
+
+  /* ── Products ── */
+  .product-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
+    gap: 8px;
+  }
+  .product-row:last-child { border-bottom: none; }
+  .product-name { font-weight: 500; font-size: 13px; }
+  .product-desc { font-size: 11px; color: var(--gray); margin-top: 2px; }
+  .product-price {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+    white-space: nowrap;
+  }
+
+  /* ── Infrastructure ── */
+  .infra-list { display: flex; flex-direction: column; gap: 8px; }
+  .infra-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--gray-pale);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .infra-item .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .dot-green { background: var(--green-light); }
+  .dot-gold  { background: #f59e0b; }
+  .dot-blue  { background: var(--blue-light); }
+  .dot-new   { background: var(--amber); }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    padding: 12px 0;
+  }
+  .flow-step {
+    background: var(--gray-pale);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+    min-width: 80px;
+  }
+  .flow-step.highlight { background: var(--green-pale); border-color: #b7e4c7; color: var(--green); }
+  .flow-step.new-tag { background: var(--amber-pale); border-color: #fcc9b5; color: var(--amber); }
+  .flow-arrow { color: var(--gray); font-size: 16px; padding: 0 4px; }
+  .flow-branch {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+  }
+  .flow-branch-label { font-size: 10px; color: var(--gray); }
+
+  /* ── Suggestions ── */
+  .suggestions { margin-top: 40px; }
+  .suggest-card {
+    background: white;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .suggest-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+  }
+  .suggest-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+    width: 48px;
+    text-align: center;
+  }
+  .suggest-body h4 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .suggest-body p { font-size: 13px; color: #4b5563; line-height: 1.6; }
+  .suggest-body .tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .suggest-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 5px;
+  }
+  .tag-high   { background: #fee2e2; color: #dc2626; }
+  .tag-medium { background: var(--gold-pale); color: var(--gold); }
+  .tag-low    { background: var(--blue-pale); color: var(--blue-light); }
+  .tag-type   { background: var(--green-pale); color: var(--green); }
+  .tag-new    { background: var(--purple-pale); color: var(--purple); }
+
+  .priority-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+  .priority-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill-high   { background: #fee2e2; color: #dc2626; }
+  .pill-medium { background: var(--gold-pale); color: var(--gold); }
+  .pill-low    { background: var(--blue-pale); color: var(--blue-light); }
+
+  /* ── Stats bar ── */
+  .stats-bar {
+    display: flex;
+    gap: 0;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    margin-bottom: 24px;
+  }
+  .stat-cell {
+    flex: 1;
+    padding: 16px 20px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+  }
+  .stat-cell:last-child { border-right: none; }
+  .stat-num { font-size: 28px; font-weight: 800; color: var(--green); line-height: 1; }
+  .stat-label { font-size: 11px; color: var(--gray); margin-top: 4px; font-weight: 500; }
+
+  .new-label {
+    display: inline-block;
+    background: var(--amber);
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Pipeline diagram ── */
+  .pipeline {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+  }
+  .pipeline-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .pipeline-box {
+    background: var(--gray-pale);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 120px;
+    text-align: center;
+  }
+  .pipeline-box.green { background: var(--green-pale); border-color: #b7e4c7; color: var(--green); }
+  .pipeline-box.gold  { background: var(--gold-pale); border-color: #fde68a; color: var(--gold); }
+  .pipeline-box.new   { background: var(--amber-pale); border-color: #fcc9b5; color: var(--amber); }
+  .pipeline-specialists {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--gray);
+    font-size: 11px;
+    padding: 32px 0 24px;
+    border-top: 1px solid var(--border);
+    margin-top: 48px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════ HEADER -->
+<div class="header">
+  <h1>TCM Jessica 🌿 現狀 + 中醫建議</h1>
+  <p>心宜中醫 Care Plus · WhatsApp AI 健康顧問 · 香港廣東話口語</p>
+  <div class="badges">
+    <span class="badge">Python 3.11 + FastAPI</span>
+    <span class="badge">ChatDaddy WhatsApp</span>
+    <span class="badge">gpt-4o-mini</span>
+    <span class="badge">SQLite CRM</span>
+    <span class="badge">沙田馬鞍山</span>
+    <span class="badge">最後更新：2026-05-25</span>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ══════════════════════════════════════════════ STATS -->
+  <div class="stats-bar">
+    <div class="stat-cell">
+      <div class="stat-num">8</div>
+      <div class="stat-label">Specialist Agents</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">52</div>
+      <div class="stat-label">知識庫 Cards</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">10</div>
+      <div class="stat-label">藥膳湯水 Products</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">3</div>
+      <div class="stat-label">外用膏藥 Products</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">44</div>
+      <div class="stat-label">自動化 Tests</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ PIPELINE -->
+  <div class="section-title">📡 對話 Pipeline（每一 Turn）</div>
+  <div class="pipeline">
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div class="pipeline-box">WhatsApp 入站</div>
+        <div style="font-size:10px; color:var(--gray)">Buffer &amp; Merge</div>
+      </div>
+      <div style="font-size:18px; color:var(--gray); padding-top:8px;">→</div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div class="pipeline-box">CRM Read</div>
+        <div style="font-size:10px; color:var(--gray)">SQLite</div>
+      </div>
+      <div style="font-size:18px; color:var(--gray); padding-top:8px;">→</div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div class="pipeline-box green">Planner Agent</div>
+        <div style="font-size:10px; color:var(--gray)">路由決策</div>
+      </div>
+      <div style="font-size:18px; color:var(--gray); padding-top:8px;">→</div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div class="pipeline-specialists">
+          <div class="pipeline-box">Greeting</div>
+          <div class="pipeline-box">Casual</div>
+          <div class="pipeline-box">FAQ</div>
+          <div class="pipeline-box">Sales</div>
+          <div class="pipeline-box">Constitution</div>
+          <div class="pipeline-box">Appointment</div>
+        </div>
+        <div style="font-size:10px; color:var(--gray); text-align:center;">最多 2 個 parallel</div>
+      </div>
+      <div style="font-size:18px; color:var(--gray); padding-top:8px;">→</div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div class="pipeline-box gold">Writer Agent</div>
+        <div style="font-size:10px; color:var(--gray)">HK Canto 口語</div>
+      </div>
+      <div style="font-size:18px; color:var(--gray); padding-top:8px;">→</div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div class="pipeline-box">CRM Write + Trace</div>
+        <div style="font-size:10px; color:var(--gray)">每 Turn 完整記錄</div>
+      </div>
+      <div style="font-size:18px; color:var(--gray); padding-top:8px;">→</div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div class="pipeline-box new">主動推送<span class="new-label">NEW</span></div>
+        <div style="font-size:10px; color:var(--amber)">天氣廣播 2x/週</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ AGENTS + KB -->
+  <div class="section-title">🤖 Agents 同 📚 知識庫</div>
+  <div class="two-col">
+
+    <!-- Agents -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">🤖</span>
+        <h3>8 個 Specialist Agents</h3>
+      </div>
+      <div class="card-body">
+        <div class="agent-grid">
+          <div class="agent-chip chip-green">👋 Greeting<br><small>首次接觸</small></div>
+          <div class="agent-chip chip-blue">💬 CasualTalk<br><small>閒聊·建立關係</small></div>
+          <div class="agent-chip chip-green">🔍 FAQ<br><small>52張卡·知識查詢</small></div>
+          <div class="agent-chip chip-gold">💰 Sales<br><small>推薦湯水·膏藥</small></div>
+          <div class="agent-chip chip-amber">🫁 Constitution<br><small>九體質·舌診視覺</small></div>
+          <div class="agent-chip chip-purple">📅 Appointment<br><small>預約診所</small></div>
+          <div class="agent-chip chip-blue">🧠 Planner<br><small>路由·並行決策</small></div>
+          <div class="agent-chip chip-green">✍️ Writer<br><small>廣東話口語·分氣泡</small></div>
+        </div>
+        <div style="margin-top:14px; padding:10px; background:var(--amber-pale); border-radius:8px;">
+          <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:4px;">🌦️ 主動廣播 (NEW)</div>
+          <div style="font-size:12px; color:#7c4a2d;">HKO 天氣 API → 每人最多 2次/週 → 關心 TCM Tips<br>觸發：寒潮 &lt;18°C / 酷熱 ≥33°C / 暴雨警告 / 暑濕 ≥85%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KB -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">📚</span>
+        <h3>52 張知識庫 Cards</h3>
+      </div>
+      <div class="card-body">
+        <div class="kb-domain">
+          <div class="kb-domain-label">體質 Constitution (4 cards)</div>
+          <div class="kb-tags">
+            <span class="kb-tag">九體質評估</span>
+            <span class="kb-tag">去濕氣</span>
+            <span class="kb-tag">氣虛疲勞</span>
+            <span class="kb-tag">中醫基礎概念</span>
+          </div>
+        </div>
+        <div class="kb-domain">
+          <div class="kb-domain-label">食療 Food Therapy (5 cards)</div>
+          <div class="kb-tags">
+            <span class="kb-tag">按體質配湯 28款</span>
+            <span class="kb-tag">家常食療 100款</span>
+            <span class="kb-tag">茶飲指南</span>
+            <span class="kb-tag">季節飲食</span>
+            <span class="kb-tag">市售產品分析</span>
+          </div>
+        </div>
+        <div class="kb-domain">
+          <div class="kb-domain-label">療程 Treatments (9 cards)</div>
+          <div class="kb-tags">
+            <span class="kb-tag">針灸</span>
+            <span class="kb-tag">艾灸</span>
+            <span class="kb-tag">拔罐</span>
+            <span class="kb-tag">刮痧</span>
+            <span class="kb-tag">美顏針</span>
+            <span class="kb-tag">肩頸療程</span>
+            <span class="kb-tag">睡眠療程</span>
+            <span class="kb-tag">纖體療程</span>
+            <span class="kb-tag">月經療程</span>
+          </div>
+        </div>
+        <div class="kb-domain">
+          <div class="kb-domain-label">穴位按摩 Acupressure (4 cards)</div>
+          <div class="kb-tags">
+            <span class="kb-tag">美容穴位</span>
+            <span class="kb-tag">提神減壓</span>
+            <span class="kb-tag">止痛穴位</span>
+            <span class="kb-tag">纖體穴位</span>
+          </div>
+        </div>
+        <div class="kb-domain">
+          <div class="kb-domain-label">婦女健康 Women's Health (4 cards)</div>
+          <div class="kb-tags">
+            <span class="kb-tag">月經調理</span>
+            <span class="kb-tag">荷爾蒙失調</span>
+            <span class="kb-tag">懷孕安全</span>
+            <span class="kb-tag">產後坐月</span>
+          </div>
+        </div>
+        <div class="kb-domain">
+          <div class="kb-domain-label">其他 Others (26 cards)</div>
+          <div class="kb-tags">
+            <span class="kb-tag">黑眼圈 x3</span>
+            <span class="kb-tag">消化腸胃 x2</span>
+            <span class="kb-tag">失眠</span>
+            <span class="kb-tag">頭痛偏頭痛</span>
+            <span class="kb-tag">皮膚暗瘡</span>
+            <span class="kb-tag">脫髮</span>
+            <span class="kb-tag">長者養生 x2</span>
+            <span class="kb-tag">兒童保健</span>
+            <span class="kb-tag">舌診</span>
+            <span class="kb-tag">季節養生 x2</span>
+            <span class="kb-tag">感冒預防</span>
+            <span class="kb-tag">都市病</span>
+            <span class="kb-tag">辦公室痛症</span>
+            <span class="kb-tag">體重管理</span>
+            <span class="kb-tag">中西藥互動</span>
+            <span class="kb-tag">腫瘤輔助</span>
+            <span class="kb-tag">中醫科學證據</span>
+            <span class="kb-tag">紅旗警示</span>
+            <span class="kb-tag">HK 服務導航</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ PRODUCTS -->
+  <div class="section-title">🛒 Products（心宜中醫）</div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">🍲</span>
+        <h3>藥膳湯水 10 款 (HK$48–120)</h3>
+      </div>
+      <div class="card-body">
+        <div class="product-row">
+          <div><div class="product-name">彭魚鰓解毒湯</div><div class="product-desc">清熱解毒·痘疹暗瘡濕疹</div></div>
+          <div class="product-price">HK$120</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">止咳潤肺湯</div><div class="product-desc">新咳久咳·氣管敏感·痰結氣喘</div></div>
+          <div class="product-price">HK$98</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">抗病毒湯</div><div class="product-desc">增免疫·健脾胃·病後恢復</div></div>
+          <div class="product-price">HK$88</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">清肝明目湯</div><div class="product-desc">眼乾澀·疲勞·滋補肝腎</div></div>
+          <div class="product-price">HK$68</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">海星止咳湯</div><div class="product-desc">潤肺化痰·扁桃腺·喉嚨痛</div></div>
+          <div class="product-price">HK$58</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">感冒止咳湯</div><div class="product-desc">急性感冒·風寒·化痰</div></div>
+          <div class="product-price">HK$58</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">清心潤肺湯</div><div class="product-desc">降心火·安神·失眠乾咳</div></div>
+          <div class="product-price">HK$48</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">花膠響螺片湯</div><div class="product-desc">滋陰養顏·荷爾蒙·免疫</div></div>
+          <div class="product-price">HK$48</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">川芎白芷天麻湯</div><div class="product-desc">頭痛頭暈·驅風活血 ⚠️孕婦忌</div></div>
+          <div class="product-price">HK$48</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">花旗蔘湯</div><div class="product-desc">清補·捱夜·口乾失眠腸胃濕熱</div></div>
+          <div class="product-price">HK$48</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">💊</span>
+        <h3>外用膏藥 3 款 (HK$90–180)</h3>
+      </div>
+      <div class="card-body">
+        <div class="product-row">
+          <div><div class="product-name">止痕濕疹膏</div><div class="product-desc">中度至嚴重濕疹·心宜自家配方·強效止痕</div></div>
+          <div class="product-price">HK$180</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">蛋黃油乳液</div><div class="product-desc">敏感肌·BB用·無香料色素礦物油</div></div>
+          <div class="product-price">HK$120</div>
+        </div>
+        <div class="product-row">
+          <div><div class="product-name">茶樹綠豆濕敏膏</div><div class="product-desc">蚊咬·輕度痕癢·輕度濕疹</div></div>
+          <div class="product-price">HK$90</div>
+        </div>
+        <div style="margin-top:16px; padding:12px; background:var(--gray-pale); border-radius:8px; font-size:12px; color:var(--gray);">
+          📦 訂購：WhatsApp <strong>wa.me/85252417448</strong><br>
+          🏥 診所：沙田馬鞍山 Care Plus 心宜中醫
+        </div>
+      </div>
+
+      <!-- CRM Fields -->
+      <div class="card-header" style="border-top:1px solid var(--border);">
+        <span class="icon">👤</span>
+        <h3>CRM — 每位用戶記錄</h3>
+      </div>
+      <div class="card-body">
+        <div class="kb-tags">
+          <span class="kb-tag">phone</span>
+          <span class="kb-tag">name</span>
+          <span class="kb-tag">status (7種)</span>
+          <span class="kb-tag">constitution (9種)</span>
+          <span class="kb-tag">age</span>
+          <span class="kb-tag">district</span>
+          <span class="kb-tag">pain_points</span>
+          <span class="kb-tag">products_pitched</span>
+          <span class="kb-tag">products_purchased</span>
+          <span class="kb-tag">appointments</span>
+          <span class="kb-tag">conversation_history</span>
+          <span class="kb-tag">user_broadcasts <span class="new-label">NEW</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ INFRASTRUCTURE -->
+  <div class="section-title">⚙️ Infrastructure</div>
+  <div class="card">
+    <div class="card-body">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+        <div class="infra-item"><div class="dot dot-green"></div><div><strong>ChatDaddy WhatsApp</strong><br>webhook + polling fallback · auth refresh 50min</div></div>
+        <div class="infra-item"><div class="dot dot-green"></div><div><strong>Buffer & Merge</strong><br>連環訊息合併後才回應（防碎片）</div></div>
+        <div class="infra-item"><div class="dot dot-green"></div><div><strong>Per-turn Trace Bundle</strong><br>traces/&lt;date&gt;/&lt;phone&gt;/&lt;turn&gt;.json</div></div>
+        <div class="infra-item"><div class="dot dot-blue"></div><div><strong>Live Admin Panel</strong><br>/admin · 即時編輯 agent prompts · 無需重部署</div></div>
+        <div class="infra-item"><div class="dot dot-blue"></div><div><strong>SQLite CRM (MVP)</strong><br>升級路徑 → Postgres (schema 已 mirror)</div></div>
+        <div class="infra-item"><div class="dot dot-blue"></div><div><strong>Keyword + Vector KB Search</strong><br>Postgres 時啟用 pgvector，SQLite 用 keyword</div></div>
+        <div class="infra-item"><div class="dot dot-gold"></div><div><strong>Blocklist</strong><br>per-phone opt-out · atomic JSON write</div></div>
+        <div class="infra-item"><div class="dot dot-gold"></div><div><strong>Tongue Photo Vision</strong><br>Claude vision 分析舌象 → 體質診斷</div></div>
+        <div class="infra-item"><div class="dot dot-new"></div><div><strong>天氣主動廣播 (NEW)</strong><br>HKO API · 2次/人/週 · 08:00–21:00 HKT</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ TCM SUGGESTIONS -->
+  <div class="suggestions">
+    <div class="section-title">🌿 中醫師視角 — 建議加入咩功能</div>
+
+    <p style="font-size:13px; color:var(--gray); margin-bottom:20px;">以下建議係從中醫臨床邏輯出發，唔係純技術角度。目標係令 Jessica 真係做到「治未病」嘅智能中醫顧問，而唔係單純嘅問答機器。</p>
+
+    <div class="priority-row">
+      <div class="priority-pill pill-high">🔴 高優先 — 直接影響收入</div>
+      <div class="priority-pill pill-medium">🟡 中優先 — 用戶黏性 + 複購</div>
+      <div class="priority-pill pill-low">🔵 低優先 — 長期差異化</div>
+    </div>
+
+    <!-- HIGH PRIORITY -->
+    <div class="suggest-card">
+      <div class="suggest-icon">📅</div>
+      <div class="suggest-body">
+        <h4>購後追蹤 — 賣完之後主動問返</h4>
+        <p>用戶買咗湯水，3–5 日後 Jessica 自動問：「之前個湯飲完點㗎？係咪有舒服啲？」<br>
+        呢個係<strong>最直接嘅複購觸發</strong>。中醫調理需要持續，一次買完就消失係最大浪費。追蹤回饋 → 更新 CRM pain_points → 推薦下一款湯。<br>
+        需要：CRM status = <code>bought</code> + timer → 主動廣播邏輯（天氣廣播基礎已搭好）。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-high">🔴 高優先</span>
+          <span class="suggest-tag tag-type">主動推送</span>
+          <span class="suggest-tag tag-new">利用現有廣播架構</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggest-card">
+      <div class="suggest-icon">🔔</div>
+      <div class="suggest-body">
+        <h4>24 節氣養生提醒 — 最正統嘅 TCM 主動關心</h4>
+        <p>中醫最核心係「天人合一」。每逢節氣（立春、夏至、秋分、冬至等），自動發一條 Jessica 嘅節氣養生 tip。<br>
+        <strong>例子：</strong> 立冬 → 「今日立冬，係補腎最好時機，宜食黑芝麻、核桃、羊肉。Care Plus 有補腎系列，需要可以搵我 🌿」<br>
+        比天氣廣播更有 TCM 特色，一年 24 個節氣 = 24 次主動觸點，完全零成本觸達。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-high">🔴 高優先</span>
+          <span class="suggest-tag tag-type">主動推送</span>
+          <span class="suggest-tag tag-new">節氣 Calendar + 廣播</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggest-card">
+      <div class="suggest-icon">🔄</div>
+      <div class="suggest-body">
+        <h4>體質複查提醒 (3個月) — 製造回流</h4>
+        <p>體質唔係固定嘅。中醫建議每 3 個月重新評估，特別係調理後。<br>
+        當用戶 <code>constitution_done</code> 滿 90 日，Jessica 自動發：「好耐冇傾，係時候睇下你嘅體質有冇變化喇 🌿 你依家係咪都係同樣嘅症狀呢？」<br>
+        呢個係<strong>最自然嘅回流觸發</strong>，唔係賣嘢，係真心關心，而且會帶出新嘅購買決策。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-high">🔴 高優先</span>
+          <span class="suggest-tag tag-type">CRM Timer</span>
+          <span class="suggest-tag tag-new">constitution 重評估</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEDIUM PRIORITY -->
+    <div class="suggest-card">
+      <div class="suggest-icon">👅</div>
+      <div class="suggest-body">
+        <h4>舌診進度追蹤 — Jessica 嘅獨家差異化</h4>
+        <p>用戶每隔 2–4 週提交一張舌照，Jessica 比較前後變化，話俾佢知調理成效：<br>
+        「上次你條脷又厚又黃，依家薄咗好多，你嘅濕熱明顯改善緊！繼續飲緊嗰個湯就啱喇。」<br>
+        <strong>中醫獨有</strong>嘅可視化進度 — 呢樣野 WhatsApp 其他 AI 完全做唔到。需要：history 入面 link 返舊舌照 + vision 比較邏輯。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-medium">🟡 中優先</span>
+          <span class="suggest-tag tag-type">Vision 追蹤</span>
+          <span class="suggest-tag tag-new">高差異化</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggest-card">
+      <div class="suggest-icon">🍵</div>
+      <div class="suggest-body">
+        <h4>每週 DIY 茶飲配方 — 零門檻高黏性</h4>
+        <p>根據用戶體質，每週一（或節氣當日）發一個可以自己煮嘅茶飲食譜：<br>
+        「依你嘅陽虛體質，今個禮拜試吓煮 <strong>薑棗桂圓茶</strong>：紅棗3粒·桂圓5粒·薑3片，水滾後細火煲20分鐘。暖胃暖手腳最啱！」<br>
+        完全唔賣嘢，但建立日常習慣 → 用戶信任 → 自然轉化購買。已有 KB 卡 <code>tcm_food_therapy_teas</code>，成本接近零。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-medium">🟡 中優先</span>
+          <span class="suggest-tag tag-type">主動推送</span>
+          <span class="suggest-tag tag-new">constitution 個人化</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggest-card">
+      <div class="suggest-icon">🤱</div>
+      <div class="suggest-body">
+        <h4>坐月陪伴 Calendar — 每日一 tip</h4>
+        <p>產婦買完之後或者登記坐月服務，Jessica 每日發一條坐月 tip（第 1–42 日）：<br>
+        「坐月第 7 日 🌸 今日可以開始飲生化湯第二劑，幫助排清惡露。記得唔好食凍嘢同生蔬菜...」<br>
+        已有完整 KB 卡 <code>tcm_postpartum_confinement</code>，只需要 CRM 記錄「坐月開始日期」同埋一個 daily scheduler。對診所嚟講係極高價值嘅服務增值。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-medium">🟡 中優先</span>
+          <span class="suggest-tag tag-type">Daily Scheduler</span>
+          <span class="suggest-tag tag-new">坐月 42日陪伴</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggest-card">
+      <div class="suggest-icon">😤</div>
+      <div class="suggest-body">
+        <h4>情志調理 Check-in — 中醫嘅心理健康</h4>
+        <p>中醫七情（怒·喜·憂·思·悲·恐·驚）直接影響五臟。當用戶閒聊提到壓力大/唔開心，Constitution Agent 同時判斷情志：<br>
+        「你最近工作壓力好大呀，中醫話思慮傷脾，你有冇成日肚脹或者唔想食嘢？」→ 鏈接消化系列湯水。<br>
+        情志辨識已有部分 CasualTalk 基礎，只需要在 Planner 加觸發邏輯。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-medium">🟡 中優先</span>
+          <span class="suggest-tag tag-type">情志 → 臟腑 Mapping</span>
+          <span class="suggest-tag tag-new">Planner Rule</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOW PRIORITY -->
+    <div class="suggest-card">
+      <div class="suggest-icon">👶</div>
+      <div class="suggest-body">
+        <h4>小朋友保健月曆 — 擴展家長客群</h4>
+        <p>當用戶提到有小朋友，開啟「兒童模式」：每月一條小兒保健 tip（換季護理·積滯·感冒預防）。<br>
+        已有 <code>tcm_children_health</code> 卡，係幾高值嘅增量客群——香港家長願意為小朋友健康花錢，而且會主動分享俾其他家長。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-low">🔵 低優先</span>
+          <span class="suggest-tag tag-type">CRM 兒童 Flag</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggest-card">
+      <div class="suggest-icon">⚡</div>
+      <div class="suggest-body">
+        <h4>即時急救穴位 — 「我頭痛點算？」</h4>
+        <p>用戶突然話「我好頭痛」或者「月經痛好勁」，現有 FAQ Agent 會解釋原因。<br>
+        但係作為中醫師，最有用係即刻畀佢一個可以自己做嘅<strong>穴位急救步驟</strong>（30秒內見效）：<br>
+        「合谷穴（虎口）按實打圈30秒，同時深呼吸，頭痛通常即刻輕少少」<br>
+        已有 4 張穴位 KB 卡，只需要 FAQ Agent 辨識「急症」context 優先推穴位。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-low">🔵 低優先</span>
+          <span class="suggest-tag tag-type">FAQ 優化</span>
+          <span class="suggest-tag tag-new">即時緩解體驗</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggest-card">
+      <div class="suggest-icon">📊</div>
+      <div class="suggest-body">
+        <h4>健康日記 / 症狀追蹤 — 數據化用戶調理歷程</h4>
+        <p>讓用戶定期打卡（一週一次）：睡眠質素·精力水平·消化狀況·月經規律。<br>
+        Jessica 生成簡單趨勢：「你過去4週睡眠由 6 分升到 8 分，繼續飲緊清心潤肺湯個方向係對嘅！」<br>
+        呢個係長期黏性功能。中醫診斷本身就係持續觀察，數字化呢個過程可以大大提升用戶感知價值。</p>
+        <div class="tags">
+          <span class="suggest-tag tag-low">🔵 低優先</span>
+          <span class="suggest-tag tag-type">用戶主動 check-in</span>
+          <span class="suggest-tag tag-new">長期黏性</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end suggestions -->
+
+</div><!-- end page -->
+
+<footer>
+  TCM Jessica · 心宜中醫 Care Plus · 沙田馬鞍山<br>
+  Generated 2026-05-25 · <strong>BROADCAST_ENABLED=true</strong> 開啟主動廣播
+</footer>
+
+</body>
+</html>

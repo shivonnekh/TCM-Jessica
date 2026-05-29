@@ -181,17 +181,6 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": "tcm-jessica"}
 
 
-@app.get("/admin/webhooks/recent")
-async def admin_recent_webhooks(limit: int = 20) -> JSONResponse:
-    """Return recent raw ChatDaddy webhook payloads captured in memory.
-
-    Useful for inspecting poll votes, group messages, and other events
-    whose structure we need to discover. No auth — admin-only by convention.
-    """
-    from src.whatsapp import diagnostic_capture
-    return JSONResponse(diagnostic_capture.recent(limit=limit))
-
-
 @app.post("/api/dev-chat")
 async def dev_chat(request: Request) -> JSONResponse:
     """Dev-sandbox pipeline runner.

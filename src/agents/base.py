@@ -228,9 +228,3 @@ class WriterOutput(BaseModel):
     # Router normalises to str before sending.
     media_to_send: list[dict[str, Any]] = Field(default_factory=list)
     # `media_to_send` items: {"url": "...", "after_bubble_idx": 0}
-    #
-    # Optional tappable buttons attached to the LAST bubble only.
-    # Derived deterministically from specialist payloads (e.g. MCQ options)
-    # by the orchestrator — NOT written by the Writer LLM.
-    # Format: [{"id": "A", "text": "A. 容易攰、氣短"}, ...]
-    buttons: list[dict[str, Any]] = Field(default_factory=list)

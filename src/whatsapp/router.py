@@ -452,15 +452,12 @@ async def _process_turn(
         except Exception:  # noqa: BLE001
             logger.exception("malformed media_to_send: %s", raw_media)
 
-        buttons = list(getattr(result.writer_output, "buttons", None) or [])
-
         await _send_bubbles(
             account_id=account_id,
             chat_id=chat_id,
             bubbles=bubbles,
             media_to_send=media_to_send,
             inbound_was_voice=bool(transcript),
-            buttons=buttons,
         )
 
 
@@ -605,7 +602,6 @@ async def _send_bubbles(
     bubbles: list[str],
     media_to_send: list[dict] | None = None,
     inbound_was_voice: bool = False,
-    buttons: list[dict] | None = None,
 ) -> None:
     """Send the Writer's bubble list with the client's typing-delay model.
 
@@ -616,9 +612,6 @@ async def _send_bubbles(
     kick off MiniMax TTS in the background while the text bubbles stream,
     then send the audio file as a final attachment so the voice-replying
     user gets an audible reply without perceiving the synthesis latency.
-
-    Buttons: when provided, attached to the LAST text bubble only.
-    WhatsApp only renders buttons on the final message in a sequence.
     """
     if not bubbles:
         return
@@ -643,7 +636,6 @@ async def _send_bubbles(
             bubbles=bubbles,
             media_to_send=media_to_send,
             voice_task=voice_task,
-            buttons=buttons or [],
         )
     finally:
         # Defensive: if we crashed before awaiting voice_task, cancel it so
@@ -660,7 +652,6 @@ async def _send_bubbles_impl(
     bubbles: list[str],
     media_to_send: list[dict],
     voice_task: asyncio.Task[Any] | None,
-    buttons: list[dict] | None = None,
 ) -> None:
     """Inner body of ``_send_bubbles`` — see that function's docstring."""
     # Group media by the bubble index they should appear after.
@@ -678,7 +669,6 @@ async def _send_bubbles_impl(
             idx = 0
         media_by_idx.setdefault(idx, []).append(url)
 
-    last_idx = len(bubbles) - 1
     for i, bubble in enumerate(bubbles):
         text = (bubble or "").strip()
         if not text:
@@ -686,16 +676,8 @@ async def _send_bubbles_impl(
         if i > 0:
             delay = client._typing_delay(text)  # noqa: SLF001 — intentional reuse
             await asyncio.sleep(delay)
-        # Attach buttons to the last bubble only. Use send_message directly
-        # (not send_long_message) so the buttons payload isn't stripped by
-        # the bubble-splitter — Writer already pre-split, text is short.
-        is_last = i == last_idx
-        bubble_buttons = (buttons or []) if is_last else None
         try:
-            if bubble_buttons:
-                await client.send_message(account_id, chat_id, text, buttons=bubble_buttons)
-            else:
-                await client.send_long_message(account_id, chat_id, text)
+            await client.send_long_message(account_id, chat_id, text)
         except client.SendProbablyDeliveredError:
             logger.warning(
                 "[WA] send timed out but probably delivered (chat=%s, bubble=%d/%d)",
@@ -817,26 +799,13 @@ async def chatdaddy_webhook(request: Request) -> JSONResponse:
         if not hmac.compare_digest(incoming.encode(), WEBHOOK_SECRET.encode()):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-    # 2. Parse payload — capture raw body first for diagnostics
+    # 2. Parse payload
     try:
-        raw_body = await request.body()
         payload = await request.json()
     except Exception:
         return JSONResponse({"error": "invalid json"}, status_code=400)
 
-    # 2a. Raw body log — helps diagnose poll vote payloads where parsed
-    # JSON might lose fields. Print first 2000 chars to stdout (Render logs).
-    try:
-        raw_str = raw_body.decode("utf-8", errors="replace")
-        if "vote" in raw_str.lower() or "poll" in raw_str.lower():
-            print(f"[WEBHOOK-RAW] POLL/VOTE payload ({len(raw_str)} bytes):\n{raw_str[:2000]}")
-        elif not payload.get("data", [{}])[0].get("fromMe", True):
-            # Log all inbound messages (fromMe=False) for debugging
-            print(f"[WEBHOOK-RAW] inbound ({len(raw_str)} bytes):\n{raw_str[:500]}")
-    except Exception:
-        pass
-
-    # 2b. Diagnostic capture — bounded in-memory buffer, never raises.
+    # 2a. Diagnostic capture — bounded in-memory buffer, never raises.
     try:
         diagnostic_capture.capture(payload)
     except Exception:
@@ -864,29 +833,7 @@ async def chatdaddy_webhook(request: Request) -> JSONResponse:
         logger.debug("Duplicate message %s — skipping", msg.message_id)
         return JSONResponse({"status": "duplicate"})
 
-    # 5a. Poll vote resolution — "A new vote was cast in this poll" arrives
-    # with no selection data. Re-fetch the original poll message from ChatDaddy
-    # to find which option was voted for, then treat it as a normal text message.
-    if msg.is_poll_vote:
-        if not msg.poll_msg_id:
-            logger.info("[poll] vote notification has no poll_msg_id — skipping")
-            return JSONResponse({"status": "poll_vote_no_ref"})
-        account_id_for_poll = msg.account_id or DEFAULT_ACCOUNT_ID
-        selected = await client.fetch_poll_selection(
-            account_id=account_id_for_poll,
-            chat_id=msg.chat_id,
-            poll_msg_id=msg.poll_msg_id,
-        )
-        if not selected:
-            logger.info("[poll] could not resolve selection for poll %s — skipping", msg.poll_msg_id[-20:])
-            return JSONResponse({"status": "poll_vote_unresolved"})
-        logger.info("[poll] resolved vote: %r for %s", selected, msg.phone)
-        # Rebuild msg with the resolved text so the rest of the pipeline
-        # treats it as a normal MCQ answer.
-        import dataclasses as _dc
-        msg = _dc.replace(msg, text=selected, is_poll_vote=False)
-
-    # 5b. Must have text or attachments
+    # 5. Must have text or attachments
     has_text = bool(msg.text.strip())
     has_media = len(msg.attachments) > 0
     if not has_text and not has_media:

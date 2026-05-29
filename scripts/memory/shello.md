@@ -87,3 +87,19 @@ Massive day. Started on production bug triage (CRM `list_phones_for_upcoming_app
 - Wrote second fix `115805e`: moved PG column migration out of SQL into Python via `information_schema` lookup + conditional ADD COLUMN. Avoids the asyncpg protocol path entirely.
 - Deploy `dep-d8arutjbc2fs73e50rc0` LIVE confirmed working.
 - Lesson: asyncpg 0.31 + Python 3.14 has issues with DDL `IF NOT EXISTS` extensions. Use information_schema lookup instead.
+
+## Session — 2026-05-29
+What happened: Full day building WhatsApp poll button UX for MCQ constitution questions. Lots of back-and-forth on whether ChatDaddy poll votes can be read.
+Decisions:
+- Buttons infrastructure: fully wired (WriterOutput.buttons, _extract_buttons in pipeline, buttons on last bubble in router, send_message accepts buttons param)
+- MCQ gets poll buttons (4 options = WhatsApp poll widget, not quick-reply buttons)
+- Poll vote selection: CANNOT be read via webhook payload (pollReplyOptions always []) or REST API (poll.options has no vote counts). This is likely a WhatsApp E2E encryption limitation.
+- Added /admin/webhooks/recent endpoint to read live webhook payloads
+- Added WEBHOOK-RAW logger to capture raw POST body of poll vote events
+- Updated webhook subscription to include message-update + message-insert
+- fetch_poll_selection() implemented but consistently returns "" (no votes > 0 in REST API)
+Still open:
+- WEBHOOK-RAW log has NOT been captured yet with a vote on the new server (user hasn't voted since deploy at 06:51 HKT). Once they vote, check `render logs -r srv-d879lsmq1p3s73av6f80 | grep WEBHOOK-RAW` immediately.
+- If WEBHOOK-RAW shows pollReplyOptions populated → update _extract_poll_selection() to read it
+- If WEBHOOK-RAW shows empty → accept limitation, revert MCQ to plain ABCD text
+- Appointment mode buttons (診所/電話) and post-pitch CTA buttons are ready to add (≤3 options = real quick-reply buttons, not polls)

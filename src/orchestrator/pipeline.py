@@ -216,17 +216,6 @@ class JessicaPipeline:
             # to ONLY URLs that actually appear in specialist payloads.
             writer_output = _filter_media_to_payload_only(writer_output, outputs)
 
-            # Attach WhatsApp buttons derived deterministically from
-            # specialist payloads (e.g. MCQ options). NOT produced by the
-            # Writer LLM — pulled here so the LLM can't drop or mangle them.
-            extracted_buttons = _extract_buttons(outputs)
-            if extracted_buttons:
-                writer_output = WriterOutput(
-                    bubbles=list(writer_output.bubbles),
-                    media_to_send=list(writer_output.media_to_send),
-                    buttons=extracted_buttons,
-                )
-
             # Append the inbound user message NOW (post-pipeline) so
             # next turn's agents see it as prior history, but THIS turn's
             # is_first_touch logic saw a clean pre-turn snapshot.
@@ -570,23 +559,7 @@ def _filter_media_to_payload_only(
     return WriterOutput(
         bubbles=stripped_bubbles,
         media_to_send=cleaned,
-        buttons=list(writer_output.buttons),
     )
-
-
-def _extract_buttons(outputs: list[SpecialistOutput]) -> list[dict[str, Any]]:
-    """Extract tappable button options from specialist payloads.
-
-    Constitution MCQ payloads include ``buttons_for_user`` — a list of
-    ``{"id": "A", "text": "A. 容易攰、氣短"}`` dicts ready to send.
-    Only the first specialist that carries buttons wins (two specialists
-    both returning buttons at once would be an unusual planner routing).
-    """
-    for output in outputs:
-        buttons = output.payload.get("buttons_for_user")
-        if buttons and isinstance(buttons, list) and len(buttons) > 0:
-            return [b for b in buttons if isinstance(b, dict) and b.get("id") and b.get("text")]
-    return []
 
 
 def _diff_user(before: User, after: User) -> dict[str, Any]:

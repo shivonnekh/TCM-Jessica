@@ -618,9 +618,6 @@ def _build_payload_ask_mcq(
         "question": q["question"],
         "options": options,
         "options_rendered": rendered_options,
-        # NOTE: no buttons_for_user — WhatsApp poll votes are E2E-encrypted,
-        # ChatDaddy never sends the selected option back (pollReplyOptions always []).
-        # Plain ABCD text is the reliable path. Confirmed 2026-05-29 after exhaustive testing.
         "writer_hint": (
             f"問第 {q_idx + 1} / {MAX_MCQ} 條題。\n"
             f"Bubble 1: 「{q['question']}」(可以加 emoji)\n"

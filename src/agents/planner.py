@@ -652,30 +652,16 @@ _MCQ_ANSWER_RE = _re_mcq.compile(r"^\s*[A-Da-d](\b|[\s\.\,。．]|$)")
 
 
 def _looks_like_mcq_answer(text: str) -> bool:
-    """Return True if the message plausibly is an MCQ answer (A/B/C/D).
-
-    Handles two shapes:
-    - Plain letter: "A", "b", "C"  (typed by user)
-    - Button-tap label: "A. 容易攰、氣短"  (ChatDaddy sends button text on tap)
-
-    Button labels are short (≤ ~25 chars) and always start with the letter
-    + ". " so the regex catches them. We extend the length cap from 30 → 60
-    to accommodate full button labels without false-positives on real
-    conversational sentences (which would have question marks or be much longer).
-    """
+    """Return True if the message plausibly is an MCQ answer (A/B/C/D)."""
     if not text:
         return False
     stripped = text.strip()
-    # Reject questions
+    # Reject if obviously not an answer (long sentence, has question marks, etc.)
+    if len(stripped) > 30:
+        return False
     if any(q in stripped for q in ("?", "？")):
         return False
-    # Plain letter answer: strict 30-char cap
-    if len(stripped) <= 30:
-        return bool(_MCQ_ANSWER_RE.match(stripped))
-    # Button-tap label: allow up to 60 chars IF it starts with "A. " pattern
-    if len(stripped) <= 60:
-        return bool(_re_mcq.match(r"^\s*[A-Da-d]\.\s", stripped))
-    return False
+    return bool(_MCQ_ANSWER_RE.match(stripped))
 
 
 _SIMPLE_GREETINGS = frozenset({

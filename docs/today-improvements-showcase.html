@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jessica AI — 今日新功能展示</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e8edf4 100%);
+      color: #1a1a2e;
+      padding: 32px 16px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      color: #2d6a4f;
+      margin-bottom: 8px;
+    }
+
+    .date {
+      color: #6b7280;
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #4b5563;
+      font-size: 0.95rem;
+      max-width: 640px;
+      margin: 0 auto 20px;
+      line-height: 1.6;
+    }
+
+    .badge-row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      border: 1px solid #e5e7eb;
+    }
+    .badge.green  { color: #047857; border-color: #6ee7b7; background: #ecfdf5; }
+    .badge.blue   { color: #1e40af; border-color: #bfdbfe; background: #eff6ff; }
+    .badge.amber  { color: #b45309; border-color: #fde68a; background: #fffbeb; }
+    .badge.purple { color: #6d28d9; border-color: #c4b5fd; background: #f5f3ff; }
+    .badge.pink   { color: #be185d; border-color: #f9a8d4; background: #fdf2f8; }
+
+    /* Feature cards */
+    .feature {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      border-top: 5px solid #2d6a4f;
+    }
+    .feature.f2 { border-top-color: #1e40af; }
+    .feature.f3 { border-top-color: #b45309; }
+    .feature.f4 { border-top-color: #6d28d9; }
+    .feature.f5 { border-top-color: #be185d; }
+
+    .feature-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+
+    .feature-icon {
+      font-size: 1.6rem;
+      width: 50px;
+      height: 50px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #ecfdf5;
+      flex-shrink: 0;
+    }
+    .f2 .feature-icon { background: #eff6ff; }
+    .f3 .feature-icon { background: #fffbeb; }
+    .f4 .feature-icon { background: #f5f3ff; }
+    .f5 .feature-icon { background: #fdf2f8; }
+
+    .feature h2 {
+      font-size: 1.3rem;
+      color: #111827;
+    }
+
+    .feature-tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #047857;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .f2 .feature-tag { color: #1e40af; }
+    .f3 .feature-tag { color: #b45309; }
+    .f4 .feature-tag { color: #6d28d9; }
+    .f5 .feature-tag { color: #be185d; }
+
+    .feature-desc {
+      color: #4b5563;
+      line-height: 1.7;
+      margin: 14px 0 18px;
+      font-size: 0.95rem;
+    }
+
+    .trigger-box {
+      background: #f9fafb;
+      border-left: 4px solid #2d6a4f;
+      padding: 12px 16px;
+      margin: 14px 0 22px;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.9rem;
+      color: #374151;
+      line-height: 1.6;
+    }
+    .f2 .trigger-box { border-left-color: #1e40af; }
+    .f3 .trigger-box { border-left-color: #b45309; }
+    .f4 .trigger-box { border-left-color: #6d28d9; }
+    .f5 .trigger-box { border-left-color: #be185d; }
+    .trigger-box strong { color: #111827; }
+
+    /* WhatsApp-style chat */
+    .chat {
+      background: #e7e2db;
+      background-image:
+        radial-gradient(circle at 25px 25px, rgba(255,255,255,0.15) 2%, transparent 2%),
+        radial-gradient(circle at 75px 75px, rgba(255,255,255,0.1) 2%, transparent 2%);
+      background-size: 100px 100px;
+      border-radius: 12px;
+      padding: 16px;
+      max-width: 480px;
+      margin: 14px auto;
+    }
+
+    .chat-label {
+      text-align: center;
+      font-size: 0.78rem;
+      color: #6b7280;
+      padding: 4px 12px;
+      background: rgba(255,255,255,0.7);
+      border-radius: 10px;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+    .chat-label-wrap {
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .bubble {
+      padding: 9px 12px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      max-width: 80%;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      word-wrap: break-word;
+      box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+      white-space: pre-wrap;
+    }
+
+    .bubble.user {
+      background: #d9fdd3;
+      margin-left: auto;
+      border-top-right-radius: 2px;
+    }
+
+    .bubble.jessica {
+      background: #fff;
+      margin-right: auto;
+      border-top-left-radius: 2px;
+    }
+
+    .bubble.image-stub {
+      background: linear-gradient(135deg, #fef3c7, #fde68a);
+      color: #78350f;
+      font-style: italic;
+      font-size: 0.85rem;
+      padding: 6px 10px;
+      margin-right: auto;
+      border-radius: 8px;
+      border: 1px dashed #d97706;
+      max-width: 60%;
+    }
+
+    .timestamp {
+      font-size: 0.68rem;
+      color: #9ca3af;
+      text-align: right;
+      margin-top: 2px;
+    }
+
+    /* Before / After comparison */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 16px;
+    }
+    @media (max-width: 720px) {
+      .compare { grid-template-columns: 1fr; }
+    }
+
+    .compare-col h4 {
+      text-align: center;
+      font-size: 0.88rem;
+      padding: 6px 10px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .compare-col.before h4 {
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+    .compare-col.after h4 {
+      background: #ecfdf5;
+      color: #047857;
+    }
+
+    .compare .chat { max-width: 100%; margin: 0; }
+
+    /* Doctor takeaway */
+    .doctor-note {
+      margin-top: 22px;
+      background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 0.92rem;
+      color: #78350f;
+      border-left: 4px solid #f59e0b;
+      line-height: 1.6;
+    }
+    .doctor-note strong { color: #78350f; }
+
+    /* Summary footer */
+    .summary {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 28px;
+      margin-top: 36px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      text-align: center;
+    }
+
+    .summary h3 {
+      color: #2d6a4f;
+      margin-bottom: 14px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-top: 22px;
+    }
+    @media (max-width: 600px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .stat {
+      padding: 14px 12px;
+      background: #f9fafb;
+      border-radius: 10px;
+    }
+    .stat-num {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #2d6a4f;
+    }
+    .stat-label {
+      font-size: 0.78rem;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    /* Bug fix list */
+    .fixes-list {
+      background: #f0fdf4;
+      border-radius: 10px;
+      padding: 18px 22px;
+      margin-top: 22px;
+      text-align: left;
+    }
+    .fixes-list h4 {
+      color: #047857;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+    }
+    .fixes-list ul {
+      list-style: none;
+      padding-left: 0;
+    }
+    .fixes-list li {
+      padding: 4px 0;
+      font-size: 0.88rem;
+      color: #374151;
+    }
+    .fixes-list li::before {
+      content: "✓ ";
+      color: #047857;
+      font-weight: 700;
+      margin-right: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <header>
+      <h1>🌿 Jessica — 今日新增功能</h1>
+      <p class="date">2026-05-26</p>
+      <p class="subtitle">繼上輪「告別總結、回頭客跟進、長期記憶」之後，今日再 ship 5 個用戶睇得到嘅功能改進。</p>
+      <div class="badge-row">
+        <span class="badge green">舌診進度追蹤</span>
+        <span class="badge blue">即時穴位緩解</span>
+        <span class="badge amber">產品推介格式化</span>
+        <span class="badge purple">智能症狀記錄</span>
+        <span class="badge pink">預約流程暢順</span>
+      </div>
+    </header>
+
+    <!-- ───────────── Feature 1: Tongue Progress ───────────── -->
+    <section class="feature">
+      <div class="feature-header">
+        <div class="feature-icon">👅</div>
+        <div>
+          <div class="feature-tag">中醫獨有功能</div>
+          <h2>1. 舌診進度追蹤</h2>
+        </div>
+      </div>
+
+      <p class="feature-desc">
+        Jessica 用視覺 AI 自動比較用戶嘅新舊舌相，講出變化、改善方向。
+        中醫師可以由 AI 預先整理嘅進度報告，幾秒內掌握病人嘅調理過程。
+      </p>
+
+      <div class="trigger-box">
+        <strong>🎯 觸發條件：</strong>用戶上載新舌相 + CRM 內已有歷史舌相記錄 + 體質已知
+      </div>
+
+      <div class="chat">
+        <div class="chat-label-wrap"><span class="chat-label">Jessica × Apple · 一個月後第二次舌診</span></div>
+
+        <div class="bubble user">影咗張新嘅脷俾你睇下 📷</div>
+        <div class="timestamp">15:20</div>
+
+        <div class="bubble image-stub">📷 [用戶舌相 — 今次]</div>
+        <div class="bubble jessica">收到，等我同上次嘅對比下 🌿</div>
+        <div class="bubble jessica">你今次嘅舌苔由厚膩變到薄潤咗好多 ✨</div>
+        <div class="bubble jessica">舌色都由淡白返到淡紅，明顯好咗</div>
+        <div class="bubble jessica">中醫角度睇 — 你嘅<b>濕熱明顯改善緊</b>，繼續飲緊嗰隻湯就啱了</div>
+        <div class="bubble jessica">過多 4 星期再影一次睇下進度，繼續加油 💪</div>
+        <div class="timestamp">15:20 ✓✓</div>
+      </div>
+
+      <div class="doctor-note">
+        <strong>中醫師看到嘅效果：</strong>普通 chatbot 完全做唔到嘅獨家差異化功能。AI 預先做好對比，醫師診症前 30 秒就掌握病人嘅治療進度。視覺上嘅進度證明亦會大大提升病人對中醫治療嘅信任 + retention。
+      </div>
+    </section>
+
+    <!-- ───────────── Feature 2: Acute Pain Relief ───────────── -->
+    <section class="feature f2">
+      <div class="feature-header">
+        <div class="feature-icon">🆘</div>
+        <div>
+          <div class="feature-tag">30 秒即時緩解</div>
+          <h2>2. 症狀即時反應 — 自動穴位緩解</h2>
+        </div>
+      </div>
+
+      <p class="feature-desc">
+        用戶一講「我頭痛」、「失眠」、「肩頸痛」等症狀，Jessica 自動由 KB 識別合適穴位，附上實物相片 + 影片，配上中醫詮釋。
+        用戶睇完 30 秒就可以即刻自己按壓緩解。
+      </p>
+
+      <div class="trigger-box">
+        <strong>🎯 觸發條件：</strong>用戶 message 提到任何疼痛/不適症狀（頭痛 / 經痛 / 失眠 / 肩頸痛 / 腰痛 / 鼻塞 / 眼攰...）
+      </div>
+
+      <div class="chat">
+        <div class="chat-label-wrap"><span class="chat-label">Jessica × Apple · 真實 dry-run 輸出</span></div>
+
+        <div class="bubble user">我最近成日失眠，又有點頭痛</div>
+        <div class="timestamp">14:32</div>
+
+        <div class="bubble jessica">咁辛苦你啦 😣 失眠仲夾住頭痛，真係幾攰㗎</div>
+        <div class="bubble jessica">頭痛常見有兩款：箍住咁痛，或者一邊跳痛；失眠就可以係難瞓、易醒，或者多夢</div>
+        <div class="bubble jessica">你可以試下按<b>風池穴</b>、<b>合谷穴</b>，同<b>四神聰</b>，酸脹感就得，唔使太大力 🌿</div>
+        <div class="bubble image-stub">📷 風池穴定位圖（自動 attach）</div>
+        <div class="bubble image-stub">📷 合谷穴定位圖（自動 attach）</div>
+        <div class="bubble jessica">如果想，我都可以再幫你對一對你而家呢種痛同失眠係咪同頸膊緊、壓力有關</div>
+        <div class="bubble jessica">最近係咪工作或者生活壓力大咗？</div>
+        <div class="timestamp">14:32 ✓✓</div>
+      </div>
+
+      <div class="doctor-note">
+        <strong>中醫師看到嘅效果：</strong>Jessica 唔係 generic chatbot 講「飲多啲熱水」 — 佢真實提供穴位資訊 + 圖片，由 心宜中醫 KB 知識庫直接抽取。任何病人輸入症狀都即時得到中醫嘅實用建議。最大化 KB 投資價值。
+      </div>
+    </section>
+
+    <!-- ───────────── Feature 3: Sales Format ───────────── -->
+    <section class="feature f3">
+      <div class="feature-header">
+        <div class="feature-icon">🍲</div>
+        <div>
+          <div class="feature-tag">產品展示格式化</div>
+          <h2>3. 產品推介必含 名 + 價錢 + 功效 + 圖</h2>
+        </div>
+      </div>
+
+      <p class="feature-desc">
+        以前 Jessica 推介產品淨係講「抗病毒湯 HK$88」，用戶完全唔知係咩。
+        而家強制每款產品都要包：產品名、價錢、功效列表（取自 KB indications）、實物相片。
+      </p>
+
+      <div class="trigger-box">
+        <strong>🎯 觸發條件：</strong>用戶問「點訂」、「邊一款」、「幾錢」、「有咩湯水」等購買意向訊號
+      </div>
+
+      <div class="compare">
+        <div class="compare-col before">
+          <h4>❌ 舊版：用戶冇資訊揀</h4>
+          <div class="chat">
+            <div class="bubble user">點訂？</div>
+            <div class="bubble jessica">抗病毒湯 — HK$88</div>
+            <div class="bubble jessica">清心潤肺湯 — HK$48</div>
+            <div class="bubble jessica">花旗蔘湯 — HK$48</div>
+            <div class="bubble jessica">想要邊款？</div>
+          </div>
+        </div>
+
+        <div class="compare-col after">
+          <h4>✓ 新版：完整資訊</h4>
+          <div class="chat">
+            <div class="bubble user">點訂？</div>
+            <div class="bubble jessica">🍲 <b>感冒止咳湯 — HK$58</b>
+功效：傷風感冒、喉嚨痛、止咳化痰、預防流感</div>
+            <div class="bubble image-stub">📷 感冒止咳湯實物相</div>
+            <div class="bubble jessica">🧴 <b>茶樹綠豆濕敏膏 — HK$90</b>
+功效：輕度濕疹、皮膚過敏、蚊咬、皮膚紅、輕度痕癢</div>
+            <div class="bubble image-stub">📷 濕敏膏實物相</div>
+            <div class="bubble jessica">🧴 <b>蛋黃油乳液 — HK$120</b>
+功效：皮膚乾燥、敏感肌、嬰兒濕疹、日常護膚、皮膚龜裂</div>
+            <div class="bubble image-stub">📷 蛋黃油乳液實物相</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="doctor-note">
+        <strong>中醫師看到嘅效果：</strong>病人睇到完整資訊，自主揀啱嘅產品。減少「我推呢隻啦」嘅 push 感覺，提升專業度。功效列表直接由 心宜中醫 KB 抽取，唔會 LLM 亂作。<br><br>
+        <strong>仲未做：</strong>產品 KB 暫時冇「材料/成份」資料，要 心宜中醫 補上 ingredient list 之後就可以一同顯示。
+      </div>
+    </section>
+
+    <!-- ───────────── Feature 4: Smart Symptom Tracking ───────────── -->
+    <section class="feature f4">
+      <div class="feature-header">
+        <div class="feature-icon">🧠</div>
+        <div>
+          <div class="feature-tag">每次對話智能記錄</div>
+          <h2>4. 智能症狀提取 — 永久記錄</h2>
+        </div>
+      </div>
+
+      <p class="feature-desc">
+        以前用戶傾過嘅症狀經常會「漏記」入 CRM。
+        而家 Jessica 用 AI 自動由每段對話提取健康訴求，永久存入用戶檔案。
+        AI 處理同時做兩件事：路由決策 + 症狀提取。
+      </p>
+
+      <div class="trigger-box">
+        <strong>🎯 觸發條件：</strong>每一 turn 對話都會自動分析（AI 主路徑）+ 關鍵詞保底兜底（雙保險）
+      </div>
+
+      <div class="chat">
+        <div class="chat-label-wrap"><span class="chat-label">Jessica 後台 — 每 turn 智能提取</span></div>
+
+        <div class="bubble user">我最近成日失眠，又有點頭痛</div>
+        <div class="bubble image-stub">🧠 AI 內部分析：<br>• 路由 → FAQ + CASUAL<br>• 提取 pain_points: ['失眠', '頭痛']<br>• 正規化 query: "我有失眠同頭痛問題"</div>
+
+        <div class="bubble user">而且我覺得腰也好酸</div>
+        <div class="bubble image-stub">🧠 AI 內部分析：<br>• 提取 pain_points: +['腰痛']<br>• CRM 累積：['失眠', '頭痛', '腰痛']</div>
+
+        <div class="bubble user">主要係夜晚瞓到一半會醒</div>
+        <div class="bubble image-stub">🧠 AI 內部分析：<br>• 細節寫入 notes<br>• 「失眠 → 早醒型」</div>
+
+        <div class="bubble jessica">😔 你呢類失眠 + 頭痛 + 腰痛三樣都有...</div>
+        <div class="bubble jessica">而且係早醒型嘅，係咪壓力大同腎氣弱呢個情況？</div>
+      </div>
+
+      <div class="doctor-note">
+        <strong>中醫師看到嘅效果：</strong>診症前一覽病人 CRM 檔案，就見到完整症狀列表 + 細節。冇咗「上次唔記得問」嘅情況。資料庫越用越完整，AI 越識病人。
+      </div>
+    </section>
+
+    <!-- ───────────── Feature 5: Appointment Booking Smooth ───────────── -->
+    <section class="feature f5">
+      <div class="feature-header">
+        <div class="feature-icon">📅</div>
+        <div>
+          <div class="feature-tag">用戶體驗優化</div>
+          <h2>5. 預約流程暢順 — 智能默認</h2>
+        </div>
+      </div>
+
+      <p class="feature-desc">
+        以前用戶話「下星期三 3 點」但冇講「到診定視診」，Jessica 會無限迴圈問同一條問題。
+        而家 Jessica 自動默認模式（in_person），用戶可以直接確認時間。
+      </p>
+
+      <div class="trigger-box">
+        <strong>🎯 觸發條件：</strong>用戶提供具體日期/時間（「下星期」、「X 點」、「下午」等）但冇明確揀模式
+      </div>
+
+      <div class="chat">
+        <div class="chat-label-wrap"><span class="chat-label">Jessica × Apple · 真實 dry-run 輸出</span></div>
+
+        <div class="bubble user">我都想預約網上視診</div>
+        <div class="bubble jessica">得呀～我幫你預約網上視診先 🌿</div>
+        <div class="bubble jessica">我而家見到有個位：<b>5月27日 10:30</b></div>
+        <div class="bubble jessica">而家仲有首次免診金優惠，視診都用到㗎</div>
+        <div class="bubble jessica">你覆我一個「OK」就得，我幫你跟進確認～</div>
+
+        <div class="bubble user">下星期三下午得唔得？</div>
+        <div class="bubble jessica">得呀～我而家見到嘅位係 5月27日 10:30 🌿</div>
+        <div class="bubble jessica">你下星期三下午想大約幾點最方便呢？</div>
+
+        <div class="bubble user">OK 三點 confirm</div>
+        <div class="bubble jessica">✅ 得咗～已經幫你確認好啦</div>
+        <div class="bubble jessica">網上視診：5月27日 10:30</div>
+        <div class="bubble jessica">記得提早 10 分鐘上線就得啦 🌿</div>
+        <div class="bubble image-stub">🔗 預約連結 + 視訊鏈接</div>
+      </div>
+
+      <div class="doctor-note">
+        <strong>中醫師看到嘅效果：</strong>病人預約成功率大幅提升。用戶唔需要明確答「到診定視診」呢類查問，Jessica 識讀 context 自動處理。預約進入 CRM 系統，醫師當日有清晰排程。
+      </div>
+    </section>
+
+    <!-- ───────────── Summary ───────────── -->
+    <section class="summary">
+      <h3>🎯 今日 ship 嘅嘢一覽</h3>
+      <p style="color: #4b5563; font-size: 0.95rem; max-width: 640px; margin: 0 auto;">
+        15 個 commits、494 tests passing、5 個用戶睇得到嘅功能改進、3 個重要 bug 修復、全 stack 升級到最新 gpt-5.4-mini 模型。
+      </p>
+
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="stat-num">15</div>
+          <div class="stat-label">Git commits</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">494</div>
+          <div class="stat-label">Tests passing</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">5</div>
+          <div class="stat-label">新用戶功能</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">20/20</div>
+          <div class="stat-label">Dry-run turns ✓</div>
+        </div>
+      </div>
+
+      <div class="fixes-list">
+        <h4>🔧 底層改進（用戶睇唔到但係好重要）</h4>
+        <ul>
+          <li>升級到最新 GPT-5.4 mini 模型（廣東話質量提升，cost 跌 60%）</li>
+          <li>修復語音轉文字模型（舊版 6 月 1 號到期，已遷移）</li>
+          <li>修復體質流程 bug：脷照無效時會無限迴圈問同一條題</li>
+          <li>修復「OK 三點」會被誤認為「拜拜」嘅 bug</li>
+          <li>修復告別總結漏判 case（多句告別「拜拜謝謝」會被忽略）</li>
+          <li>體質流程加 escape valve：用戶想轉話題隨時可以離開</li>
+          <li>產品 catalog 加 indications / 功效 / 體質配對等完整欄位</li>
+          <li>新增 20-turn 自動化測試 script（每次 deploy 前可以跑驗證）</li>
+        </ul>
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>

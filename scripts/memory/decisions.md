@@ -2043,3 +2043,1062 @@
 - 4-day Render auto-deploy outage (webhook broken since 2026-05-22). Workaround = manual deploy via Render API. Permanent fix requires dashboard intervention by user.
 - Persona dry-run script (`scripts/persona_dry_run.py`) became a critical pre-deploy validation tool. Found 4 bugs in <2 minutes that tests didn't catch.
 - QA agent team parallelism worked: 3 agents in worktrees, each scope-bounded, each commits its own fixes. Merge order = Sales → Constitution → Conversation (least planner conflicts).
+
+## 2026-05-26 23:45 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 09:59 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 10:44 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 10:47 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 11:08 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 11:13 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 11:14 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 11:34 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 11:40 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 11:44 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 12:13 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 13:36 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 13:53 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 14:30 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 14:35 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 14:49 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 15:26 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 15:39 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 15:53 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 15:59 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 17:05 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 17:13 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 17:14 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 17:14 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 17:20 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 17:23 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 17:27 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-27 17:31 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-28 18:08 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-28 18:19 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-29 09:45 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-29 09:59 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-29 10:05 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-29 10:26 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-29 10:46 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-29 10:46 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+
+## 2026-05-29 10:52 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+
+## 2026-05-29 10:54 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+
+## 2026-05-29 10:58 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-29 11:18 — TCM-Jessica
+
+### Architecture Decisions
+- **Is this a gap you want to fill?** Because it's actually a good one for TCM — HK weather swings are a natural trigger for health care tips. The architecture for it would be:
+- 呢個 split 大概貴 3-5x（但 production query 量低，每個用戶日均幾條 message 而已），可能值得試。要我先 fix 緊嘅產品圖片同功效顯示問題，定先做 model split 實驗？
+- Now apply `extracted_pain_points` to CRM. This is the **critical fix**:
+- 如果你想 sales 都用 vector，可以做 **hybrid**：keyword 先跑 → 如果 score < threshold 就 fallback 去 vector 搜 product cards。Same pattern as FAQ。
+- | **Pain extraction inconsistent** | 🟡 Medium | gpt-5.4-mini 有時 omit `extracted_pain_points`。CRM 最終仍然係 `[]`。要 strengthen prompt 或者用 JSON schema enforcement |
+- **Fix E1: Pain extraction fallback** — if LLM omits `extracted_pain_points`, fall back to keyword detection so CRM still gets populated:
+- | 2. **辨證**（證型 — 八綱 / 臟腑 / 氣血津液）| ❌ 冇 | 而家**呢一刻嘅 pattern**：肝鬱氣滯 / 脾腎陽虛 / 心脾兩虛 / 痰濕困脾… 真實臨床用嚟開方嘅根據 |
+- 2. **No agent does pattern inference** — material in KB, but never extracted into structured form
+
+### Decisions & Reasoning
+- | 7 | **情志調理** | 用戶話壓力大 → 自動鏈接對應臟腑 → 推薦湯水 |
+- 同天氣廣播共用同一個 6h loop — 唔需要多開任何新嘅 background task。下一個做邊個？節氣提醒定體質複查？
+- 全部共用同一個 6h loop，一個 `BROADCAST_ENABLED=true` 開晒。
+- `wa.me/85252417448?text=想訂【彭魚鰓解毒湯 HK$120】` — 用戶 click 之後會喺 WhatsApp 開一個 chat 去診所號碼，直接落單。呢個唔係 Jessica 的號碼，所以 Jessica 本身永遠唔知用戶訂咗咩。
+- 1. **Purchase CTA 加了一句話** — Jessica 推完產品之後，Writer 現在會加 `「訂完記得話我知呀 😊」`，提示用戶返嚟確認
+- 2. **Planner routing** — 用戶回覆 "我訂咗" 類型嘅訊息 → 自動路由去 Sales Agent
+- 唯一的 imperfection：我們假設用戶買的是最後被 pitch 的產品（最多 3 款）。如果佢買係更早 pitch 的，會有偏差。但對於 care follow-up 嚟講，"你有冇飲到上次介紹嘅湯" 夠用了。之後如果需要精確，可以讓 Jessica 問 "係邊款呀？"
+- 从零搭建了一个 asyncio 后台循环，每 6 小时跑一次，自动给用户发主动关怀消息。共有四种广播类型：
+
+
+## 2026-05-29 11:56 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+
+## 2026-05-29 12:35 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+
+
+## 2026-05-29 13:08 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+
+
+## 2026-05-29 13:16 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 13:41 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 13:45 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 13:51 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 14:00 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 14:23 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 14:29 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 14:36 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 14:44 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 14:54 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 14:57 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 15:00 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 15:02 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 15:05 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 15:08 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 15:20 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 15:24 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
+
+## 2026-05-29 16:06 — TCM-Jessica
+
+### Architecture Decisions
+- Got the full picture. Clean implementation: buttons are extracted from specialist payload **in the orchestrator** (not by the Writer LLM) and attached to the last bubble in the router. Five files to touch.
+
+### Decisions & Reasoning
+- Good — the raw webhook is already being captured. Let me first restore the poll buttons, then update `parse_webhook` to properly extract the selected option from poll vote events instead of dropping them:
+- Now fix `parse_webhook` to properly read poll votes instead of dropping them:
+- Now update `parse_webhook` to detect poll votes and set those fields instead of trying to extract from the webhook body:
+
