@@ -94,8 +94,31 @@ class ChatDaddyMessage:
         return self.sender_id
 
     @property
+    def effective_user_phone(self) -> str:
+        """CRM key for this message's sender.
+
+        DMs: returns the chat_id digits (= sender's phone number).
+        Groups: returns ``g_<sender_id>`` where sender_id is the LID that
+        uniquely identifies the participant in this group.  The ``g_``
+        prefix prevents accidental collision with real phone numbers (LIDs
+        are 15-18 digits; HK numbers are 11-13 digits — overlap is possible
+        in theory, prefix removes the ambiguity).
+
+        Callers that previously used ``phone`` (group JID digits) should
+        switch to this property when the CRM key is what they need.
+        """
+        if self.is_group:
+            return f"g_{self.sender_id}"
+        return self.phone
+
+    @property
     def user_id(self) -> str:
-        """Patient user_id for the CRM store (DM-only — Jessica is 1-on-1)."""
+        """Patient user_id for the CRM store (DM-only — Jessica is 1-on-1).
+
+        Deprecated for group messages — use ``effective_user_phone`` for
+        the per-sender CRM key; group reply destination is always
+        ``chat_id``, not this.
+        """
         return f"wa_{self.phone}"
 
 

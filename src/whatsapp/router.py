@@ -45,6 +45,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from src import llm_transcribe
+from src.agents.acute_pain import detect_all_health_complaints
+from src.crm.models import ConversationMessage
 from src.orchestrator.pipeline import JessicaPipeline, PipelineResult
 from src.whatsapp import (
     blocklist,
@@ -71,6 +73,15 @@ router = APIRouter(tags=["whatsapp"])
 
 WEBHOOK_SECRET = os.environ.get("CHATDADDY_WEBHOOK_SECRET", "")
 DEFAULT_ACCOUNT_ID = os.environ.get("CHATDADDY_ACCOUNT_ID", "")
+
+# Group-chat identity — needed so Jessica knows when she's been @-mentioned.
+#   JESSICA_BOT_JID   — the bot's own JID digits (e.g. "85212345678").
+#                       Derive from the ChatDaddy number; leave blank in local
+#                       dev if you don't have it — name-based detection still works.
+#   JESSICA_BOT_NAMES — comma-separated display names (default: "Jessica,jessica").
+BOT_JID: str = os.environ.get("JESSICA_BOT_JID", "").strip()
+_raw_bot_names = os.environ.get("JESSICA_BOT_NAMES", "Jessica,jessica")
+BOT_NAMES: list[str] = [n.strip() for n in _raw_bot_names.split(",") if n.strip()]
 
 # Production guard — when APP_ENV=production, the webhook MUST have a secret
 # configured. We refuse to start without one. In dev / test, an empty secret
@@ -337,6 +348,83 @@ def _lock_for(phone: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _phone_locks[phone] = lock
     return lock
+
+
+# ---------------------------------------------------------------------------
+# Group-chat silent listener
+# ---------------------------------------------------------------------------
+
+
+async def _listen_group_message(msg: ChatDaddyMessage, account_id: str) -> None:  # noqa: ARG001
+    """Absorb a group message that didn't @-mention Jessica.
+
+    No reply is sent. We update the sender's CRM record so that when they
+    eventually do @-mention Jessica she already has context: their display
+    name and any health complaints mentioned in passing.
+
+    The account_id argument is accepted for API symmetry / future use
+    (e.g. read-receipt acknowledgement) but is currently unused.
+    """
+    user_phone = msg.effective_user_phone
+    pipeline = _get_pipeline()
+    if pipeline is None:
+        logger.debug("[group_listen] pipeline not ready — skipping %s", user_phone)
+        return
+
+    try:
+        async with _lock_for(user_phone):
+            # Load (or create) the per-sender CRM record.
+            user = await pipeline._crm.get_or_create_user(user_phone)  # noqa: SLF001
+
+            updates: dict[str, Any] = {}
+
+            # Store the sender's WhatsApp display name the first time we see them.
+            if msg.sender_name and not user.name:
+                updates["name"] = msg.sender_name
+                logger.debug(
+                    "[group_listen] captured name=%r for %s", msg.sender_name, user_phone
+                )
+
+            # Extract health complaints mentioned in passing (keyword scan —
+            # no LLM call, so this is free and fast).
+            if msg.text.strip():
+                complaints = detect_all_health_complaints(msg.text)
+                if complaints:
+                    existing = set(user.pain_points or [])
+                    new_complaints = [c for c in complaints if c not in existing]
+                    if new_complaints:
+                        updates["pain_points"] = list(existing | set(new_complaints))
+                        logger.info(
+                            "[group_listen] added pain_points=%s for %s",
+                            new_complaints, user_phone,
+                        )
+
+            # Append message to rolling history window so Planner has context
+            # when the user eventually @-mentions Jessica.
+            if msg.text.strip():
+                conv_msg = ConversationMessage(
+                    role="user",
+                    text=msg.text,
+                    timestamp=str(msg.timestamp),
+                )
+                user = user.append_message(conv_msg)
+                updates["conversation_history"] = [
+                    m.model_dump() for m in user.conversation_history
+                ]
+
+            if updates:
+                updated_user = user.with_updates(**{
+                    k: v for k, v in updates.items()
+                    if k not in ("conversation_history",)  # already applied via append_message
+                })
+                await pipeline._crm.save_user(updated_user)  # noqa: SLF001
+            elif msg.text.strip():
+                # Still persist the updated conversation_history even if no
+                # other fields changed.
+                await pipeline._crm.save_user(user)  # noqa: SLF001
+
+    except Exception as exc:
+        logger.exception("[group_listen] failed for %s: %s", user_phone, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -840,25 +928,31 @@ async def chatdaddy_webhook(request: Request) -> JSONResponse:
         logger.info("Empty message from %s — skipping", msg.phone)
         return JSONResponse({"status": "empty"})
 
-    # 6. Group gate — Jessica is 1-on-1 only.
-    gate_decision = group_gate.decide(msg)
-    if gate_decision.dropped:
+    # 6. Group gate — listen silently or reply when @-mentioned.
+    if msg.is_group:
+        group_action = group_gate.decide_group(msg, BOT_JID, BOT_NAMES)
+        if group_action == group_gate.GroupAction.LISTEN:
+            # Not mentioned — absorb context into CRM, no reply.
+            account_id = msg.account_id or DEFAULT_ACCOUNT_ID
+            _record_seen_message_id(msg.message_id)
+            _spawn_bg(_listen_group_message(msg, account_id))
+            return JSONResponse({"status": "group_listen"})
+        # GroupAction.REPLY — fall through to normal pipeline dispatch below.
         logger.info(
-            "[group_gate] dropped %s — %s (chat=%s)",
-            msg.message_id, gate_decision.reason, msg.chat_id,
+            "[group_gate] REPLY — %s mentioned in group %s",
+            BOT_JID or BOT_NAMES, msg.chat_id,
         )
-        return JSONResponse({
-            "status": "group_untagged",
-            "reason": gate_decision.reason,
-        })
 
-    # 7. Record for dedup + dispatch
+    # 7. Record for dedup + dispatch.
+    # Use effective_user_phone (per-sender CRM key) so group members each
+    # get their own CRM record instead of being bucketed under the group JID.
     _record_seen_message_id(msg.message_id)
     account_id = msg.account_id or DEFAULT_ACCOUNT_ID
+    user_phone = msg.effective_user_phone
 
     if WA_USE_MERGE_BUFFER:
         _spawn_bg(_enqueue_for_merge(
-            phone=msg.phone,
+            phone=user_phone,
             text=msg.text,
             chat_id=msg.chat_id,
             account_id=account_id,
@@ -868,7 +962,7 @@ async def chatdaddy_webhook(request: Request) -> JSONResponse:
         ))
     else:
         _spawn_bg(_process_turn(
-            phone=msg.phone,
+            phone=user_phone,
             merged_text=msg.text,
             chat_id=msg.chat_id,
             account_id=account_id,
