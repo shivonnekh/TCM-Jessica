@@ -68,6 +68,14 @@ services:
       - key: ORDER_WHATSAPP
         value: "+85252417448"
 
+      # ── Group-chat identity ──────────────────────────────────
+      # Jessica's own JID digits — used to detect @-mentions in group chats.
+      # Same number as the ChatDaddy account (bot and order line share one WA number).
+      - key: JESSICA_BOT_JID
+        value: "85252417448"
+      - key: JESSICA_BOT_NAMES
+        value: "Jessica,jessica,Jessica姐"
+
       # ── Persistent Postgres (auto-injected by Render) ───────
       # Render wires DATABASE_URL automatically when a database is linked.
       # repo_factory.py reads DATABASE_URL first → uses CRMRepoPG.
