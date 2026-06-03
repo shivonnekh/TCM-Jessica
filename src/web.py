@@ -181,6 +181,19 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": "tcm-jessica"}
 
 
+@app.get("/admin/webhooks/recent")
+async def admin_recent_webhooks(limit: int = 20, group_only: bool = False) -> JSONResponse:
+    """Return recent raw ChatDaddy webhook payloads captured in memory.
+
+    Diagnostic only — lets us inspect the exact shape of group @-mention
+    events (mentioned_jids, quoted, text) without grepping logs. The
+    underlying buffer is bounded + ephemeral (lost on restart).
+    Pass ?group_only=true to filter to group-chat events.
+    """
+    from src.whatsapp import diagnostic_capture
+    return JSONResponse(diagnostic_capture.recent(limit=limit, group_only=group_only))
+
+
 @app.post("/api/dev-chat")
 async def dev_chat(request: Request) -> JSONResponse:
     """Dev-sandbox pipeline runner.
