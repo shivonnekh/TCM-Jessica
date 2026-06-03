@@ -212,13 +212,16 @@ class FAQAgent:
         # detailed how-to / recipe answer rather than terse facts.
         payload["top_card_content"] = top_card_content
 
-        # If the topic is acupressure / 穴位, scan content for points we
-        # have images for and attach to payload so Writer can media them.
-        payload.setdefault("acupoint_images", [])
-        if self._acupoints is not None:
+        # Acupoint images are GATED on the user actually asking about
+        # acupressure — not on the matched card body mentioning a point.
+        # Otherwise a plain symptom message ("失眠又頭痛") would spam 穴位
+        # images the user never requested (UX + cost bug). Once intent is
+        # confirmed, we still scan the card content to pick WHICH points.
+        payload["acupoint_images"] = []
+        if self._acupoints is not None and _wants_acupressure(inp.effective_query):
             search_blob = " ".join(
                 [
-                    inp.user_message,
+                    inp.effective_query,
                     top_card_content.get("title", ""),
                     top_card_content.get("core_answer", ""),
                     " ".join(top_card_content.get("supporting_points", [])),
@@ -276,6 +279,28 @@ def _wants_recipes(text: str) -> bool:
     if not text:
         return False
     return any(kw in text for kw in _RECIPE_LIST_KEYWORDS)
+
+
+# Terms in the USER's message that signal genuine acupressure intent.
+# Multi-char terms preferred to reduce false positives; single-char 穴/揉
+# are safe because they almost never appear in unrelated HK chat.
+_ACUPRESSURE_INTENT_KEYWORDS = (
+    "穴位", "按摩", "推拿", "點揉", "按邊度", "按邊", "手法", "指壓",
+    "穴", "揉", "壓", "按",
+    "acupoint", "acupressure", "massage", "press",
+)
+
+
+def _wants_acupressure(text: str) -> bool:
+    """True only when the USER's message expresses acupressure intent.
+
+    Gates acupoint-image attachment on user intent, NOT on whether the
+    matched KB card body happens to mention a point name. Prevents
+    pushing 穴位 images when the user only described symptoms.
+    """
+    if not text:
+        return False
+    return any(kw in text for kw in _ACUPRESSURE_INTENT_KEYWORDS)
 
 
 def _build_extract_prompt(query: str, hits: list[SearchHit]) -> str:
