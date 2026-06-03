@@ -10,6 +10,7 @@ from src.agents.planner import (
     _build_returning_hint,
     _is_farewell,
     _rule_overrides,
+    _wants_appointment,
 )
 from src.crm.models import Constitution, ConversationMessage, User, UserStatus
 
@@ -250,3 +251,52 @@ def test_returning_greeting_hi_variations() -> None:
         assert decision is not None, f"no decision for greeting {greeting!r}"
         assert decision.specialists == [SpecialistName.CASUAL], \
             f"wrong specialist for {greeting!r}: {decision.specialists}"
+
+
+# ---------------------------------------------------------------------------
+# Appointment-intent rule — must NOT fire on generic time words
+# (regression: 2026-06-03 prod 鬼打墙 — "今天有什么汤水介绍啊？" was forced to
+#  appointment because "今天" was an appointment keyword → pushed 視診 promo,
+#  never answered the soup question).
+# ---------------------------------------------------------------------------
+
+def test_today_soup_question_is_not_appointment() -> None:
+    """The exact prod bug: a soup question containing 今天 must NOT route to appt."""
+    assert _wants_appointment("今天有什么汤水介绍啊？") is False
+    assert _wants_appointment("今日有咩湯水介紹啊？") is False
+
+
+def test_generic_time_words_are_not_appointment() -> None:
+    for msg in (
+        "今天好攰",
+        "聽日想試下煲湯",
+        "明天可以飲呢個湯嗎？",
+        "幾時可以飲呢個湯？",
+        "呢個湯幾點飲最好？",
+    ):
+        assert _wants_appointment(msg) is False, f"false positive on {msg!r}"
+
+
+def test_genuine_appointment_still_detected() -> None:
+    for msg in (
+        "我想預約睇醫師",
+        "可唔可以網上視診？",
+        "想到診睇中醫",
+        "聽日想預約",            # time word + real booking signal → still True
+        "診所喺邊呀？",
+    ):
+        assert _wants_appointment(msg) is True, f"missed appointment intent in {msg!r}"
+
+
+def test_delivery_address_not_mistaken_for_clinic_address() -> None:
+    """Bare '地址' (delivery address in a sales order) must NOT trigger appointment."""
+    assert _wants_appointment("我嘅地址係沙田...") is False
+
+
+def test_today_soup_question_falls_through_to_llm() -> None:
+    """End-to-end at the rule layer: soup question yields no rule override
+    (so it reaches the LLM Planner, which routes to FAQ/Sales)."""
+    user = User(phone="+85291234567", status=UserStatus.QUALIFIED)
+    decision = _rule_overrides(user, "今天有什么汤水介绍啊？", [])
+    if decision is not None:
+        assert SpecialistName.APPOINTMENT not in decision.specialists

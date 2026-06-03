@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jessica — 最新版本更新簡報</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e8edf4 100%);
+      color: #1a1a2e;
+      padding: 32px 16px;
+      min-height: 100vh;
+      line-height: 1.65;
+    }
+    .container { max-width: 920px; margin: 0 auto; }
+
+    header { text-align: center; margin-bottom: 36px; }
+    h1 { font-size: 1.95rem; color: #2d6a4f; margin-bottom: 6px; }
+    .date { color: #6b7280; font-size: 0.95rem; margin-bottom: 14px; }
+    .lede { max-width: 660px; margin: 0 auto; color: #4b5563; font-size: 0.98rem; }
+
+    /* Summary strip */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 28px 0 36px;
+    }
+    .summary .pill {
+      background: #fff;
+      border-radius: 14px;
+      padding: 18px 12px;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .summary .emoji { font-size: 1.7rem; display: block; margin-bottom: 6px; }
+    .summary .label { font-size: 0.82rem; color: #374151; font-weight: 600; }
+
+    /* Section card */
+    .section {
+      background: #fff;
+      border-radius: 16px;
+      padding: 26px 30px;
+      margin-bottom: 22px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    }
+    .section h2 {
+      font-size: 1.25rem;
+      color: #2d6a4f;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section .sub { color: #6b7280; font-size: 0.9rem; margin-bottom: 18px; }
+    .section p { color: #374151; font-size: 0.96rem; margin-bottom: 10px; }
+
+    .tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-left: auto;
+    }
+    .tag.live { background: #dcfce7; color: #166534; }
+
+    /* WhatsApp before/after */
+    .ba {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    @media (max-width: 640px) { .ba { grid-template-columns: 1fr; } .summary { grid-template-columns: repeat(2,1fr);} }
+    .ba-col h4 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+    }
+    .ba-col.before h4 { color: #b91c1c; }
+    .ba-col.after h4 { color: #166534; }
+    .chat {
+      background: #e5ddd5;
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 100%;
+    }
+    .bubble {
+      background: #fff;
+      border-radius: 10px;
+      padding: 8px 11px;
+      margin-bottom: 7px;
+      font-size: 0.86rem;
+      color: #1f2937;
+      max-width: 92%;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.08);
+    }
+    .bubble.me { background: #d9fdd3; margin-left: auto; }
+    .bubble.img {
+      font-style: italic; color: #6b7280; font-size: 0.78rem;
+      background: #f3f4f6; border: 1px dashed #d1d5db;
+    }
+    .count { font-size: 0.74rem; color: #6b7280; margin-top: 6px; text-align: right; }
+
+    /* feature bullets */
+    .feat { list-style: none; margin-top: 12px; }
+    .feat li { padding: 8px 0 8px 28px; position: relative; color: #374151; font-size: 0.94rem; border-bottom: 1px solid #f1f5f9; }
+    .feat li:last-child { border-bottom: none; }
+    .feat li::before { content: "✓"; position: absolute; left: 4px; color: #16a34a; font-weight: 700; }
+
+    /* note box */
+    .note {
+      background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+      border-left: 5px solid #d97706;
+      border-radius: 0 12px 12px 0;
+      padding: 16px 22px;
+      margin: 26px 0 10px;
+    }
+    .note .nl { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; color: #92400e; text-transform: uppercase; margin-bottom: 4px; }
+    .note p { color: #78350f; font-size: 0.92rem; margin: 0; }
+
+    footer { text-align: center; color: #9ca3af; font-size: 0.82rem; margin-top: 32px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Jessica 最新版本更新</h1>
+      <div class="date">2026 年 6 月 3 日 · 已上線</div>
+      <p class="lede">呢個版本主要圍繞「對話更似真人」同「覆蓋更多場景」。重點：Jessica 而家識用語音回覆、傾偈唔再似審問、仲可以喺 WhatsApp 群組裡面幫客。</p>
+    </header>
+
+    <div class="summary">
+      <div class="pill"><span class="emoji">🎙️</span><span class="label">語音回覆</span></div>
+      <div class="pill"><span class="emoji">💬</span><span class="label">對話體驗升級</span></div>
+      <div class="pill"><span class="emoji">👥</span><span class="label">群組支援</span></div>
+      <div class="pill"><span class="emoji">⚡</span><span class="label">更穩定可靠</span></div>
+    </div>
+
+    <!-- 1. Voice -->
+    <div class="section">
+      <h2>🎙️ 語音回覆 <span class="tag live">已上線</span></h2>
+      <div class="sub">客人用語音問，Jessica 用語音答 — 親切好多</div>
+      <p>以前客人錄一段語音問問題，Jessica 只會打字回覆。而家如果客人用語音，Jessica 會用<strong>地道香港廣東話女聲</strong>讀返覆畀佢聽，同時都會有文字。</p>
+      <ul class="feat">
+        <li>專為心宜中醫揀嘅溫柔女聲（中年、warm、唔似機械人）</li>
+        <li>只有客人用語音先會用語音回 — 唔會無端端傳聲畀打字嘅客</li>
+        <li>幫到唔方便打字 / 年長嘅客人</li>
+      </ul>
+    </div>
+
+    <!-- 2. Convo UX -->
+    <div class="section">
+      <h2>💬 對話體驗升級 <span class="tag live">已上線</span></h2>
+      <div class="sub">我哋用真實對話測試，搵出 Jessica 幾個「唔似真人」嘅毛病，逐個改好</div>
+      <p>之前 Jessica 好熱心，但有啲問題：成日一次過問三條問題（似審問）、每次都長篇大論、又會無端端傳一堆穴位圖、客人問「你可以點幫我」佢又答得好空泛。以下係改善前後嘅真實對比：</p>
+
+      <div class="ba">
+        <div class="ba-col before">
+          <h4>改善前</h4>
+          <div class="chat">
+            <div class="bubble me">我最近成日失眠，又有點頭痛</div>
+            <div class="bubble">咁辛苦你啦 😟</div>
+            <div class="bubble">中醫話長期緊張同心煩，會影響瞓眠同頭痛㗎</div>
+            <div class="bubble">你呢種失眠係難入睡、易醒，定係早醒多夢？</div>
+            <div class="bubble">頭痛係一邊定兩邊？同頸膊繃緊有冇關？</div>
+            <div class="bubble">最近係咪工作壓力大咗？瞓前個腦停唔到？</div>
+            <div class="bubble img">📷 穴位圖 ×3（客人冇問過）</div>
+            <div class="count">5 句 · 一次問 3 條問題 · 3 張圖</div>
+          </div>
+        </div>
+        <div class="ba-col after">
+          <h4>改善後</h4>
+          <div class="chat">
+            <div class="bubble me">我最近成日失眠，又有點頭痛</div>
+            <div class="bubble">咁辛苦你呀 🫶 成日失眠又頭痛，真係會好攰。</div>
+            <div class="bubble">中醫角度睇，情緒緊繃同諗太多，好容易令人唔安落，瞓得差、頭亦會頂住。</div>
+            <div class="bubble">平時有冇腰酸、夜尿多，或者耳鳴呢？</div>
+            <div class="count">3 句 · 只問 1 條問題 · 唔亂傳圖</div>
+          </div>
+        </div>
+      </div>
+
+      <ul class="feat">
+        <li><strong>一次最多問一條問題</strong> — 唔再似審問，客人冇壓力</li>
+        <li><strong>回覆長短有分寸</strong> — 簡單關心就 2-3 句，唔再次次長篇</li>
+        <li><strong>唔再亂傳穴位圖</strong> — 只有客人問按摩先傳（亦慳成本）</li>
+        <li><strong>答得實在</strong> — 客人問「點幫我」會畀具體下一步（睇體質 / 推介湯水），唔再空泛安慰</li>
+      </ul>
+    </div>
+
+    <!-- 3. Group -->
+    <div class="section">
+      <h2>👥 WhatsApp 群組支援 <span class="tag live">已上線</span></h2>
+      <div class="sub">Jessica 而家可以喺群組裡面幫客，唔使淨係一對一</div>
+      <p>以前 Jessica 只做一對一對話。而家喺群組裡面：</p>
+      <ul class="feat">
+        <li><strong>叫佢個名就會答</strong> — 例如「jessica 今日天氣點？」佢就會回應</li>
+        <li><strong>冇叫佢嘅時候會靜靜聆聽</strong> — 記低客人講過嘅身體狀況，下次客人搵佢就已經有 context</li>
+        <li>群組裡面每個客人各有獨立記錄，唔會撈亂</li>
+      </ul>
+      <div class="ba" style="grid-template-columns:1fr;">
+        <div class="ba-col after">
+          <h4>群組示範</h4>
+          <div class="chat">
+            <div class="bubble me">jessica 今日天氣咁焗，有咩湯水推薦？</div>
+            <div class="bubble">焗熱天最啱清熱解暑 🌿 等我同你睇睇邊款啱你體質～</div>
+            <div class="count">叫名 → Jessica 即刻回應</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Reliability -->
+    <div class="section">
+      <h2>⚡ 更穩定可靠 <span class="tag live">已上線</span></h2>
+      <div class="sub">升級伺服器，唔再「漏單」</div>
+      <p>之前用免費伺服器，閒置一陣就會「瞓著」，客人嗰刻發訊息有機會收唔到。而家已經升級到付費方案，<strong>伺服器 24 小時保持喺線</strong>，客人嘅訊息唔會再漏。</p>
+    </div>
+
+    <div class="note">
+      <div class="nl">一個提提</div>
+      <p>資料庫（儲存所有客人記錄）目前仍係免費版，<strong>6 月 20 號到期</strong>。到期前要升級，否則客人資料會被清走。建議近期內處理。</p>
+    </div>
+
+    <footer>心宜中醫 Care Plus · Jessica WhatsApp 中醫助理 · 內部簡報</footer>
+  </div>
+</body>
+</html>

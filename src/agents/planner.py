@@ -883,13 +883,19 @@ def _wants_to_buy(text: str) -> bool:
 
 # Appointment-intent signals. When user wants to book / see doctor /
 # visit clinic / use online consultation.
+#
+# IMPORTANT: keep this list to UNAMBIGUOUS booking / consultation / clinic
+# signals only. Generic time words (今日/今天/聽日/明天/幾點/幾時可以) were
+# REMOVED 2026-06-03 — they false-matched everyday questions ("今天有咩湯水
+# 介紹" → wrongly forced to appointment → pushed 視診 promo → 鬼打墙). A bare
+# date/time word is NOT booking intent. Genuine bookings that include a time
+# word still match here via the real signal (e.g. "聽日想預約" hits 預約), and
+# anything ambiguous falls through to the LLM Planner, which routes correctly.
 _APPOINTMENT_INTENT_KEYWORDS = (
     "預約", "预约", "睇醫師", "看医师", "睇中醫", "看中医",
     "到診", "到诊", "親身", "亲身", "到店", "上門", "上门",
     "視診", "视诊", "視像", "视像", "video", "視頻",
-    "幾時可以", "几时可以", "幾點", "几点", "今日", "今天",
-    "聽日", "听日", "明天", "後日", "后日",
-    "診所喺邊", "诊所在哪", "點去", "点去", "地址",
+    "診所喺邊", "诊所在哪", "點去診所", "点去诊所", "診所地址", "诊所地址",
 )
 
 
