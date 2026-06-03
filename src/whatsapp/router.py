@@ -37,6 +37,7 @@ import os
 import sys
 import time
 from collections import OrderedDict
+from datetime import datetime
 from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 from typing import Any
@@ -402,10 +403,14 @@ async def _listen_group_message(msg: ChatDaddyMessage, account_id: str) -> None:
             # Append message to rolling history window so Planner has context
             # when the user eventually @-mentions Jessica.
             if msg.text.strip():
+                try:
+                    at = datetime.utcfromtimestamp(int(msg.timestamp))
+                except (ValueError, OSError, OverflowError):
+                    at = datetime.utcnow()
                 conv_msg = ConversationMessage(
                     role="user",
-                    text=msg.text,
-                    timestamp=str(msg.timestamp),
+                    content=msg.text,
+                    at=at,
                 )
                 user = user.append_message(conv_msg)
                 updates["conversation_history"] = [
