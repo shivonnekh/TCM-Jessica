@@ -16,7 +16,10 @@ services:
     name: tcm-jessica
     runtime: python
     region: singapore
-    plan: free
+    # Upgraded free → starter on 2026-06-03. Starter does not spin down,
+    # so inbound WhatsApp webhooks are never dropped during a cold start
+    # (free-tier cold starts were silently losing group messages).
+    plan: starter
 
     buildCommand: pip install -e .
 
