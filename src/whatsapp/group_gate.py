@@ -94,8 +94,39 @@ def _mentioned_by_jid(msg: ChatDaddyMessage, bot_jid_digits: str) -> bool:
     return False
 
 
+def _name_in_text(text_lower: str, name: str) -> bool:
+    """True if ``name`` addresses the bot in ``text_lower`` (already lowered).
+
+    Matches both the @-tagged form (``@jessica``) and the bare name
+    (``hi jessica, ...``). ChatDaddy does NOT deliver ``mentionedJids`` on
+    non-WABA accounts (confirmed via raw webhook 2026-06-03), so native
+    @-tags arrive as plain text — meaning we must accept the bare name too,
+    not just the ``@``-prefixed form.
+
+    For ASCII names we require word boundaries so ``jessica`` doesn't match
+    inside another token (e.g. ``jessicaa``). For names containing CJK we
+    fall back to a substring test (``\\b`` is unreliable across CJK).
+    """
+    name_l = name.lower().strip()
+    if not name_l:
+        return False
+    if f"@{name_l}" in text_lower:
+        return True
+    if name_l.isascii():
+        pattern = rf"(?<![a-z0-9]){re.escape(name_l)}(?![a-z0-9])"
+        return re.search(pattern, text_lower) is not None
+    return name_l in text_lower
+
+
 def _mentioned_in_text(msg: ChatDaddyMessage, bot_jid_digits: str, bot_names: list[str]) -> bool:
-    """True if the message text @-tags the bot by digits or by name."""
+    """True if the message text addresses the bot by digits or by name.
+
+    Detection forms (any one triggers):
+      * ``@<bot_jid_digits>``   — plain-text JID tag
+      * ``@<name>``             — @-prefixed name
+      * bare ``<name>``         — name used as a word (non-WABA @-tags land
+                                  here, since ChatDaddy strips mention data)
+    """
     text = msg.text
     if not text:
         return False
@@ -106,13 +137,9 @@ def _mentioned_in_text(msg: ChatDaddyMessage, bot_jid_digits: str, bot_names: li
             if match.group(1) == bot_jid_digits:
                 return True
 
-    # @<name> — e.g. "@Jessica", "@jessica"
+    # @<name> or bare <name> — e.g. "@Jessica", "hi jessica"
     text_lower = text.lower()
-    for name in bot_names:
-        if f"@{name.lower()}" in text_lower:
-            return True
-
-    return False
+    return any(_name_in_text(text_lower, name) for name in bot_names)
 
 
 def decide_group(

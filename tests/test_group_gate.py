@@ -108,6 +108,21 @@ class TestDecideGroupReply:
         msg = _group_msg(text="@Jessica姐 可唔可以介紹下湯水？")
         assert decide_group(msg, BOT_JID, ["Jessica姐"]) == GroupAction.REPLY
 
+    def test_bare_name_no_at_triggers_reply(self):
+        # The exact prod case (2026-06-03): user addressed her by name with
+        # no @ symbol. ChatDaddy sends no mentionedJids on non-WABA, so this
+        # must be caught by bare-name matching.
+        msg = _group_msg(text="hi jessica, whats the weather today")
+        assert decide_group(msg, BOT_JID, BOT_NAMES) == GroupAction.REPLY
+
+    def test_bare_name_followed_by_cjk_triggers_reply(self):
+        msg = _group_msg(text="jessica你好，想問下湯水")
+        assert decide_group(msg, BOT_JID, BOT_NAMES) == GroupAction.REPLY
+
+    def test_bare_name_start_of_message_triggers_reply(self):
+        msg = _group_msg(text="Jessica 我個頭好痛")
+        assert decide_group(msg, BOT_JID, BOT_NAMES) == GroupAction.REPLY
+
     def test_jid_match_ignores_missing_jid_config(self):
         # If BOT_JID is blank, JID-based detection is skipped — still LISTEN
         msg = _group_msg(mentioned_jids=(f"{BOT_JID}@s.whatsapp.net",))
@@ -128,9 +143,10 @@ class TestDecideGroupListen:
         msg = _group_msg(text="@85299999999 你好")
         assert decide_group(msg, BOT_JID, BOT_NAMES) == GroupAction.LISTEN
 
-    def test_mention_without_at_symbol_is_listen(self):
-        # Text says "jessica" without @
-        msg = _group_msg(text="jessica好靚呀")
+    def test_name_embedded_in_larger_word_is_listen(self):
+        # "jessicaa" — the name is a substring of a longer ASCII token, not
+        # an address. Word-boundary matching must NOT fire here.
+        msg = _group_msg(text="jessicaa is my username")
         assert decide_group(msg, BOT_JID, BOT_NAMES) == GroupAction.LISTEN
 
     def test_empty_text_is_listen(self):
