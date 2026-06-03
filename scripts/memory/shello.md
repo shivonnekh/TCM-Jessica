@@ -103,3 +103,61 @@ Still open:
 - If WEBHOOK-RAW shows pollReplyOptions populated → update _extract_poll_selection() to read it
 - If WEBHOOK-RAW shows empty → accept limitation, revert MCQ to plain ABCD text
 - Appointment mode buttons (診所/電話) and post-pitch CTA buttons are ready to add (≤3 options = real quick-reply buttons, not polls)
+
+## Session — 2026-06-03
+What happened: Built group chat support for Jessica. She now listens silently in groups and only replies when @-mentioned or her name is used.
+
+Decisions:
+- **Group CRM key**: `g_<sender_lid>` (per-person, not per-group) — each member gets own record
+- **Mention detection**: mentionedJids JID match → quote-reply → @<digits> → @<name> → bare name (word boundary for ASCII, substring for CJK)
+- **Bare name added** (linter update): ChatDaddy confirmed non-WABA accounts don't deliver mentionedJids — so "jessica你好" with no @ must also trigger REPLY. Already updated in group_gate.py.
+- **Bot JID = 85252417448** — same number as ORDER_WHATSAPP (clinic uses one WA number for both). Wired into render.yaml as JESSICA_BOT_JID.
+- **JESSICA_BOT_NAMES** defaulted to "Jessica,jessica,Jessica姐" in render.yaml
+- Silent listen path: keyword-scan pain_points + capture sender_name + append to conversation_history. Zero LLM cost.
+
+Still open:
+- Group CRM records (g_<lid>) and DM records (phone) won't auto-link if same person uses both. Acceptable for now.
+- Haven't tested in a real group yet — user should add Jessica to a test group and @-mention her
+- Auto-deploy still broken — manual deploy via Render API as workaround
+- Postgres free expires 2026-06-20 — upgrade before launch
+
+## Session — 2026-06-03
+
+### What happened
+Heavy ship day across voice, conversation quality, group chat, infra, and a prod routing bug. Started from "MiniMax TTS still there?" → shipped voice-out; pivoted to convo/UX hardening via real dry-runs; debugged group chat end-to-end with raw webhook capture; user upgraded web service to Starter; closed with a prod 鬼打墙 routing fix found from a live trace.
+
+### Shipped (11 commits, all live on prod)
+- **Voice-out (MiniMax)** `e7c46f0` — `src/media/tts.py`, match-modality (only voice-reply when inbound was voice), `Cantonese_KindWoman`, atomic cache write, task-cancel guard. 30 tests.
+- **Planner JSON escape fix** `e136625` — bd09d9f's inferred_patterns example had unescaped `{}` → str.format KeyError → apology on EVERY turn for ~2 days. Added test_prompt_template_render.py forcing function.
+- **4 convo/UX fixes** `f71ad49` — found via live persona dry-run:
+  - One-question rule (was stacking 3 questions/turn)
+  - Bubble restraint (was maxing 5 bubbles every turn)
+  - Acupoint media gating (faq_agent only attaches images when USER asks 穴位/按摩 — was scanning card body, pushing 6 images unprompted)
+  - Forward motion (concrete next step on "點幫我", not fluff)
+  - Before/after dry-run proved all 4 +辨證 surfaces naturally + converts to pitch
+- **Group chat** `a456b41`+`f149e2d`+`9adfa93` — reply when name-addressed, listen+absorb CRM otherwise.
+  - Fixed LISTEN crash (ConversationMessage built with text=/timestamp= but model is content=/at=datetime)
+  - Set JESSICA_BOT_JID=85252417448 + names on live service
+  - **KEY FINDING via /admin/webhooks/recent raw capture**: ChatDaddy sends NO mentionedJids on non-WABA — native @-tags arrive as plain text. So matcher now accepts bare name ("hi jessica" not just "@jessica"). ASCII word-boundary, CJK substring.
+- **鬼打墙 routing fix** `adeaf9b` — prod trace showed "今天有什么汤水介绍" → appointment (pushed 視診), looped. Root: `_APPOINTMENT_INTENT_KEYWORDS` had bare time words 今日/今天/聽日/明天/幾點/幾時可以. Removed all. Tightened 地址→診所地址 (delivery address ≠ clinic q). 6 regression tests.
+- **version-update-showcase.html** — stakeholder summary (voice/convo/group/reliability + DB deadline note)
+
+### Infra
+- **Web service: free → Starter ($7)** — user paid. No more spin-down → webhooks reliable. render.yaml updated for parity (`d192294`).
+- Tests: 511 → 620 passing.
+
+### Still open / next
+- ⚠️ **Postgres STILL FREE — deletes itself 2026-06-20 (17 days)**. The $7 was web service ONLY. DB is separate paid item. HARD DEADLINE — data loss if not upgraded. User aware, handling separately (or wants me to pull upgrade options).
+- Group trade-off shipped: name-about-her ("jessica好靚") also triggers reply. Acceptable for consult group; switch to always-reply-whitelisted-groups if noisy.
+- Render auto-deploy webhook still broken — manual deploy via API (render CLI key in ~/.render/cli.yaml, SVC=srv-d879lsmq1p3s73av6f80, owner tea-cumb3f5umphs73ehbo30).
+- TTS_ENABLED=true on prod, MINIMAX_* shared with dr-baba quota — watch usage.
+- Advisory self-critique guard (medical prescriptive red-line) — still not built, flagged earlier.
+
+### Method notes (what worked)
+- **persona_dry_run.py is gold** — found 4 convo issues zero unit tests caught; ~$0.25/run. User trusts real replies > tests.
+- **/admin/webhooks/recent raw capture** decisively solved the group mystery — read ground truth, don't theorize.
+- **Live trace fetch** (`/trace/<id>` on prod) showed exact planner routing for the 鬼打墙 bug. Traces list at `/trace`.
+- Render deploy poll pattern: trigger via API, until-loop on status==live, then /health.
+
+### Tonal
+- User is decisive + action-oriented ("push", "do all in parallel", "b"). Ships fast, tests on real WhatsApp, sends screenshots of failures with sharp diagnosis ("鬼打墙", "unknown contact").
