@@ -192,6 +192,83 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": "tcm-jessica"}
 
 
+# Privacy policy + data deletion — required to publish the Meta App to Live mode.
+_LEGAL_PAGE = """<!DOCTYPE html>
+<html lang="zh-HK"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} — 心宜中醫 Jessica</title>
+<style>
+ body{{font-family:-apple-system,"PingFang HK",sans-serif;max-width:720px;
+ margin:40px auto;padding:0 20px;line-height:1.7;color:#222}}
+ h1{{font-size:1.6rem}} h2{{font-size:1.15rem;margin-top:1.6em}}
+ a{{color:#0a7}} small{{color:#888}}
+</style></head><body>
+{body}
+<hr><small>心宜中醫 (Care Plus) · Jessica AI · 聯絡 / Contact:
+<a href="https://wa.me/85252417448">wa.me/85252417448</a></small>
+</body></html>"""
+
+_PRIVACY_BODY = """
+<h1>私隱政策 Privacy Policy</h1>
+<p><small>最後更新 Last updated: 2026-06-05</small></p>
+
+<p>心宜中醫 (Care Plus) 旗下嘅 AI 助手「Jessica」透過 WhatsApp、Instagram
+及 Facebook Messenger 同用戶溝通。本政策說明我哋點樣收集、使用同保護你嘅資料。</p>
+
+<h2>1. 我哋收集嘅資料 Information We Collect</h2>
+<ul>
+<li>你發送嘅訊息內容（文字、語音、圖片）</li>
+<li>你的平台帳戶識別碼（Instagram / Facebook / WhatsApp ID）同顯示名稱</li>
+<li>你主動提供嘅健康相關資訊（用作中醫體質建議）</li>
+</ul>
+
+<h2>2. 用途 How We Use It</h2>
+<ul>
+<li>回覆你嘅查詢、提供中醫養生及產品資訊</li>
+<li>安排診所預約</li>
+<li>改善服務質素</li>
+</ul>
+<p>我哋<strong>唔會</strong>將你嘅個人資料出售俾第三方。</p>
+
+<h2>3. 資料保存與保安 Data Retention & Security</h2>
+<p>對話記錄只用於提供服務，並以加密方式儲存。你可隨時要求刪除你嘅資料。</p>
+
+<h2>4. 第三方服務 Third-Party Services</h2>
+<p>我哋使用 Meta（Instagram / Facebook / WhatsApp）平台 API 傳遞訊息，
+並使用 AI 模型生成回覆。相關資料受各供應商之私隱政策約束。</p>
+
+<h2>5. 刪除你的資料 Data Deletion</h2>
+<p>如需刪除你嘅所有資料，請參閱
+<a href="/data-deletion">資料刪除說明</a>，或 WhatsApp
+<a href="https://wa.me/85252417448">wa.me/85252417448</a> 通知我哋。</p>
+
+<h2>6. 聯絡我哋 Contact</h2>
+<p>任何私隱相關查詢，請 WhatsApp
+<a href="https://wa.me/85252417448">wa.me/85252417448</a>。</p>
+"""
+
+_DATA_DELETION_BODY = """
+<h1>資料刪除 Data Deletion Instructions</h1>
+<p>你有權要求刪除我哋持有嘅所有關於你嘅資料。</p>
+<h2>點樣要求刪除 How to request deletion</h2>
+<ol>
+<li>WhatsApp 我哋：<a href="https://wa.me/85252417448">wa.me/85252417448</a></li>
+<li>或喺 Instagram / Facebook 私訊我哋，發送訊息「<strong>DELETE MY DATA</strong>」</li>
+</ol>
+<p>我哋會喺 30 日內刪除你嘅對話記錄及個人識別資料，並向你確認。</p>
+"""
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy() -> str:
+    return _LEGAL_PAGE.format(title="私隱政策 Privacy Policy", body=_PRIVACY_BODY)
+
+
+@app.get("/data-deletion", response_class=HTMLResponse)
+async def data_deletion() -> str:
+    return _LEGAL_PAGE.format(title="資料刪除 Data Deletion", body=_DATA_DELETION_BODY)
+
+
 @app.get("/admin/webhooks/recent")
 async def admin_recent_webhooks(limit: int = 20, group_only: bool = False) -> JSONResponse:
     """Return recent raw ChatDaddy webhook payloads captured in memory.
