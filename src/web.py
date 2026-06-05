@@ -37,6 +37,10 @@ from src.tools.kb_indexer import index_kb
 from src.tools.kb_search import KBSearch
 from src.tools.vector_store import VectorStore
 from src.trace.writer import TraceWriter
+from src.channels.facebook import router as facebook_router
+from src.channels.facebook import set_pipeline as set_fb_pipeline
+from src.channels.instagram import router as instagram_router
+from src.channels.instagram import set_pipeline as set_ig_pipeline
 from src.whatsapp import client as wa_client
 from src.whatsapp.router import router as whatsapp_router
 from src.whatsapp.router import set_pipeline as set_wa_pipeline
@@ -108,6 +112,11 @@ async def lifespan(app: FastAPI):
     # Register the pipeline with the WhatsApp router so the webhook +
     # poller can dispatch turns to it.
     set_wa_pipeline(pipeline)
+    # Same pipeline backs the Instagram + Facebook webhooks (opt-in via
+    # IG_ENABLED / FB_ENABLED). CRM keys are namespaced ("ig_<igsid>",
+    # "fb_<psid>") so surfaces never collide.
+    set_ig_pipeline(pipeline)
+    set_fb_pipeline(pipeline)
 
     # Start background tasks — token refresh + (optional) polling fallback.
     # Both are best-effort: if ChatDaddy credentials aren't configured we
@@ -158,6 +167,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="TCM-Jessica", version="0.1.0", lifespan=lifespan)
 app.include_router(whatsapp_router)
+app.include_router(instagram_router)
+app.include_router(facebook_router)
 app.include_router(admin_router)
 
 # Public-readable static media — ChatDaddy fetches these via the URL

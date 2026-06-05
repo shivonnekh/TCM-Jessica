@@ -110,3 +110,39 @@ services:
       # Absolute URL so ChatDaddy can fetch the generated audio file.
       - key: JESSICA_BASE_URL
         value: https://tcm-jessica.onrender.com
+
+      # ── Meta channels: Instagram + Facebook (Graph API) ──────
+      # Both share ONE Meta App ⇒ ONE app secret + verify token.
+      # Webhook URLs to register with Meta:
+      #   IG: https://tcm-jessica.onrender.com/webhook/instagram
+      #   FB: https://tcm-jessica.onrender.com/webhook/facebook
+      #
+      # App secret — verifies X-Hub-Signature-256 on every inbound webhook.
+      - key: META_APP_SECRET
+        sync: false
+      # Verify token — you choose this string; paste the SAME value into
+      # Meta's webhook "Verify Token" field during the GET handshake.
+      - key: META_VERIFY_TOKEN
+        sync: false
+
+      # ── Instagram ──
+      - key: IG_ENABLED
+        value: "false"   # flip to "true" after IG secrets are set
+      - key: IG_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: IG_USER_ID          # IG professional account id (Send API target)
+        sync: false
+
+      # ── Facebook Page ──
+      - key: FB_ENABLED
+        value: "false"   # flip to "true" after FB secrets are set
+      - key: FB_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: FB_PAGE_ID          # Facebook Page id (Send API target)
+        sync: false
+
+      # Comment→DM CTA rules (keyword → fixed DM). Canned-first: a keyword
+      # match sends predefined content, NO LLM call, unless the rule sets
+      # "use_agent": true. Edit data/channels/comment_responses.json.
+      - key: COMMENT_RESPONSES_PATH
+        value: data/channels/comment_responses.json
