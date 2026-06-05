@@ -72,9 +72,15 @@ class _FakeUser:
 
 
 class _FakeCRM:
+    """Models user existence by whether seed history is present:
+    empty history → brand-new user (get_user returns None)."""
     def __init__(self, history=None):
         self._history = history or []
         self.appended = []
+    async def get_user(self, key, **_):
+        if not self._history:
+            return None
+        return _FakeUser(conversation_history=list(self._history))
     async def get_or_create_user(self, key):
         return _FakeUser(conversation_history=list(self._history))
     async def append_message(self, key, msg):

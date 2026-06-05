@@ -107,9 +107,15 @@ class ChloeAgent:
         persona = load_persona()
 
         # 1. Load user + decide if this is a first-touch conversation.
-        user = await self._crm.get_or_create_user(crm_key)
+        # GREET ONCE PER USER: key the greeting off whether the user record
+        # already exists — NOT off message history (which can read empty if
+        # a persist hiccups, causing repeated greetings). get_or_create_user
+        # always creates the row on the first turn, so an existing row means
+        # we've met before.
+        existing = await self._crm.get_user(crm_key)
+        is_first_touch = existing is None
+        user = existing if existing is not None else await self._crm.get_or_create_user(crm_key)
         history = list(getattr(user, "conversation_history", []) or [])
-        is_first_touch = len(history) == 0
 
         # 2. Decide whether we need the LLM. On a first-touch PURE greeting
         # (just "hi"/"你好"), the intro greeting IS the whole reply — no LLM
