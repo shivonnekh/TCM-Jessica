@@ -298,9 +298,18 @@ OTHER TODO: IG token auto-refresh loop (60d expiry ~Aug 2026); Facebook line (co
 
 **App identity**
 - Meta App name: `TCM-ChloeChan` · Instagram app name (use-case): `TCM-ChloeChan-IG`
-- App ID / Instagram app ID: `1550317559787276`
-- Dashboard: https://developers.facebook.com/apps/1550317559787276/
+- ⭐ CORRECTION (2026-06-10): **Meta App ID (parent) = `1546738537122434`** (from FB page-token debug_token, application=TCM-ChloeChan). `1550317559787276` is the *Instagram* app ID (sub-identifier), NOT the parent app. App secret + dashboard belong to the parent.
+- Dashboard: https://developers.facebook.com/apps/1546738537122434/
 - Business portfolio: Chloe Chan Chi Ching
+
+**Messenger / Facebook Page (added 2026-06-10)**
+- FB Page ID (FB_PAGE_ID) = `1200796509776468`
+- FB_PAGE_ACCESS_TOKEN: type=PAGE, scope=`pages_messaging`, **expires_at=0 (never expires)** 🎉, is_valid=true. Stored in Render env only (NOT git). data_access_expires_at ~90d (re-auth if it lapses, but token itself permanent).
+- Webhook: `/webhook/facebook` callback + verify token `jessica_tcm_2026_xY9k` (shared w/ IG). Handshake tested PASS (echo challenge, wrong token=403).
+- Render envs set via API (HTTP 200): FB_PAGE_ACCESS_TOKEN, FB_PAGE_ID=1200796509776468, FB_ENABLED=true. Service srv-d879lsmq1p3s73av6f80.
+- ⚠️ CODE FIX REQUIRED & DONE (commit ec67a50): meta_client._base() was GLOBAL (read META_GRAPH_BASE=graph.instagram.com) → would have routed FB sends to graph.instagram.com (wrong host, silent fail). Now per-platform: IG→graph.instagram.com, FB→graph.facebook.com. New override vars IG_GRAPH_BASE/FB_GRAPH_BASE; META_GRAPH_BASE kept as IG legacy alias. Regression test: tests/test_meta_client_base.py (4 tests).
+- Dashboard TODO still on user: subscribe the Page to webhook field `messages` (+`feed` for comments) in Messenger settings → Add subscriptions.
+- Public users need App Review for `pages_messaging` (page admin/testers work now). FB code shares Chloe agent route (object=="page").
 
 **Connected account**
 - IG handle: `chloechan.cccc` · account_type: **BUSINESS** (must NOT be Creator — Creator can't message)
