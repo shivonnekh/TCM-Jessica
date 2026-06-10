@@ -116,6 +116,10 @@ class ChloeAgent:
         is_first_touch = existing is None
         user = existing if existing is not None else await self._crm.get_or_create_user(crm_key)
         history = list(getattr(user, "conversation_history", []) or [])
+        logger.info(
+            "[chloe] turn key=%s first_touch=%s history_len=%d existing=%s",
+            crm_key, is_first_touch, len(history), existing is not None,
+        )
 
         # 2. Decide whether we need the LLM. On a first-touch PURE greeting
         # (just "hi"/"你好"), the intro greeting IS the whole reply — no LLM
