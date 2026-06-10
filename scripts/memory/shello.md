@@ -308,8 +308,20 @@ OTHER TODO: IG token auto-refresh loop (60d expiry ~Aug 2026); Facebook line (co
 - Webhook: `/webhook/facebook` callback + verify token `jessica_tcm_2026_xY9k` (shared w/ IG). Handshake tested PASS (echo challenge, wrong token=403).
 - Render envs set via API (HTTP 200): FB_PAGE_ACCESS_TOKEN, FB_PAGE_ID=1200796509776468, FB_ENABLED=true. Service srv-d879lsmq1p3s73av6f80.
 - ⚠️ CODE FIX REQUIRED & DONE (commit ec67a50): meta_client._base() was GLOBAL (read META_GRAPH_BASE=graph.instagram.com) → would have routed FB sends to graph.instagram.com (wrong host, silent fail). Now per-platform: IG→graph.instagram.com, FB→graph.facebook.com. New override vars IG_GRAPH_BASE/FB_GRAPH_BASE; META_GRAPH_BASE kept as IG legacy alias. Regression test: tests/test_meta_client_base.py (4 tests).
-- Dashboard TODO still on user: subscribe the Page to webhook field `messages` (+`feed` for comments) in Messenger settings → Add subscriptions.
 - Public users need App Review for `pages_messaging` (page admin/testers work now). FB code shares Chloe agent route (object=="page").
+
+**🔑 CRITICAL: this app has TWO secrets (Instagram-Login model)**
+- Instagram app (sub-id `1550317559787276`) secret = Render `META_APP_SECRET` (32c, signs IG webhooks ✅).
+- Meta App (parent `1546738537122434`) secret = [REDACTED] → set as Render `FB_APP_SECRET` (signs FB/Messenger webhooks). ⚠️ leaked in chat → rotate later. Lives only in Render env.
+- Proof: IG POSTs verify 200 w/ META_APP_SECRET; app-token `1546…|META_APP_SECRET` = "Invalid signature" but `1546…|<FB_APP_SECRET>` = valid. → genuinely 2 secrets.
+- CODE FIX (commit c89278a): verify_signature(raw,header,*,secret=None); process_post(...,app_secret=None); facebook route passes meta_webhook._fb_app_secret() (=FB_APP_SECRET, fallback META_APP_SECRET). IG route unchanged. Tests: tests/test_meta_webhook_signature.py.
+
+**🐞 Messenger delivery root cause (FIXED via Graph API)**
+- App-level webhook for `page` object had **EMPTY fields** (callback active, url correct, but no `messages` subscribed) → Meta had nothing to deliver → zero POSTs.
+- Fixed by app-token POST /{app_id}/subscriptions object=page fields=`messages,messaging_postbacks` → {"success":true}. (Other fields messaging_optins/referral/reactions need Advanced Access — skipped.)
+- Page-level subscribed_apps NOT readable/writable w/ our page token (only has pages_messaging, lacks pages_manage_metadata). Relying on dashboard "Connect page" to have set it. If DMs still don't arrive after the 2 fixes, suspect page subscribed_apps → toggle page subscription in Messenger dashboard step 2.
+- Diagnostics how-to: app token = `1546738537122434|<FB_APP_SECRET>`; GET /{app_id}/subscriptions shows object/fields/active. Render logs API: GET https://api.render.com/v1/logs?ownerId=tea-d467almuk2gs73cvmd60&resource=srv-d879lsmq1p3s73av6f80&limit=N&text=POST (filter to dodge /health flood every 5s).
+- ⚠️ ROTATE both secrets after testing (IG + Meta app secrets both leaked in chat history).
 
 **Connected account**
 - IG handle: `chloechan.cccc` · account_type: **BUSINESS** (must NOT be Creator — Creator can't message)
