@@ -3,98 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>心宜中醫 · 語音診症</title>
+<title>心宜中醫 · 視頻診症</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --green: #3ecf8e;
-    --red:   #f04444;
-    --text:  #e8edf2;
-    --muted: rgba(255,255,255,0.5);
-  }
-
   html, body {
     height: 100%; width: 100%;
-    background: #0d1117;
+    background: #0b0f0c;
     overflow: hidden;
     font-family: -apple-system, "PingFang HK", sans-serif;
-    color: var(--text);
+    color: #e8edf2;
     touch-action: manipulation;
   }
 
-  /* ── Full-screen Chloe "video" ── */
-  #callScreen {
+  /* ── Chloe full-screen canvas "video" ── */
+  #chloeCanvas {
     position: fixed;
     inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(ellipse at 50% 40%, #0e2a1c 0%, #0d1117 70%);
+    width: 100%;
+    height: 100%;
   }
 
-  #chloeAvatar {
-    width: 160px;
-    height: 160px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #1e7c56 0%, #2db67d 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 64px;
-    font-weight: 700;
-    color: white;
-    letter-spacing: -2px;
-    transition: box-shadow 0.3s;
-    position: relative;
-    z-index: 1;
-  }
-  #chloeAvatar.speaking {
-    animation: speakRing 1.4s ease-in-out infinite;
-  }
-  @keyframes speakRing {
-    0%, 100% { box-shadow: 0 0 0 0   rgba(62,207,142,0), 0 0 0 0   rgba(62,207,142,0); }
-    50%       { box-shadow: 0 0 0 18px rgba(62,207,142,0.2), 0 0 0 36px rgba(62,207,142,0.07); }
-  }
-
-  /* Name + status over avatar */
-  #chloeInfo {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, calc(-50% + 110px));
-    text-align: center;
-    z-index: 2;
-  }
-  #chloeName  { font-size: 20px; font-weight: 600; }
-  #chloeTitle { font-size: 13px; color: var(--muted); margin-top: 3px; }
-
-  /* Subtitle — what Chloe just said */
-  #subtitle {
-    position: fixed;
-    bottom: 130px;
-    left: 20px; right: 20px;
-    text-align: center;
-    font-size: 15px;
-    line-height: 1.55;
-    color: white;
-    text-shadow: 0 1px 6px rgba(0,0,0,0.8);
-    opacity: 0;
-    transition: opacity 0.3s;
-    z-index: 10;
-    max-height: 80px;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-  }
-  #subtitle.show { opacity: 1; }
-
-  /* Status pill */
+  /* ── Status pill ── */
   #statusPill {
     position: fixed;
-    top: 16px;
-    left: 50%;
+    top: 16px; left: 50%;
     transform: translateX(-50%);
     font-size: 12px;
     padding: 5px 14px;
@@ -103,178 +35,133 @@
     z-index: 20;
     backdrop-filter: blur(8px);
     transition: background 0.3s, color 0.3s;
+    white-space: nowrap;
   }
-  #statusPill.idle       { background: rgba(255,255,255,0.1); color: var(--muted); }
-  #statusPill.listening  { background: rgba(240,68,68,0.25);  color: #ff8080; }
-  #statusPill.thinking   { background: rgba(240,168,68,0.2);  color: #f0c060; }
-  #statusPill.speaking   { background: rgba(62,207,142,0.2);  color: var(--green); }
-  #statusPill.error      { background: rgba(240,68,68,0.2);   color: var(--red); }
-  #statusPill.conn       { background: rgba(240,168,68,0.15); color: #f0c060; }
+  .s-conn      { background: rgba(240,168,68,0.2); color: #f0c060; }
+  .s-idle      { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+  .s-listening { background: rgba(62,207,142,0.2);  color: #3ecf8e; }
+  .s-thinking  { background: rgba(240,168,68,0.2);  color: #f0c060; }
+  .s-speaking  { background: rgba(62,207,142,0.25); color: #3ecf8e; }
+  .s-error     { background: rgba(240,68,68,0.2);   color: #f04444; }
 
-  /* Mic level wave (shown during recording) */
-  #micWave {
+  /* ── Subtitle ── */
+  #subtitle {
     position: fixed;
-    bottom: 175px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: flex-end;
-    gap: 3px;
-    height: 24px;
+    bottom: 120px; left: 20px; right: 20px;
+    text-align: center;
+    font-size: 15px; line-height: 1.6;
+    color: white;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8);
     opacity: 0;
-    transition: opacity 0.2s;
-    z-index: 10;
+    transition: opacity 0.4s;
+    z-index: 20;
+    max-height: 90px; overflow: hidden;
   }
-  #micWave.show { opacity: 1; }
-  #micWave span {
-    width: 3px;
-    border-radius: 2px;
-    background: var(--red);
-    animation: waveBounce 0.8s ease-in-out infinite;
+  #subtitle.show { opacity: 1; }
+
+  /* ── Listening indicator (wave) ── */
+  #listenWave {
+    position: fixed;
+    bottom: 105px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: flex-end; gap: 3px;
+    height: 20px; opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 20;
+  }
+  #listenWave.show { opacity: 1; }
+  #listenWave span {
+    width: 3px; border-radius: 2px;
+    background: #3ecf8e;
+    animation: waveBounce 0.9s ease-in-out infinite;
     transform-origin: bottom;
   }
-  #micWave span:nth-child(1) { height: 8px;  animation-delay: 0s; }
-  #micWave span:nth-child(2) { height: 18px; animation-delay: 0.1s; }
-  #micWave span:nth-child(3) { height: 24px; animation-delay: 0.2s; }
-  #micWave span:nth-child(4) { height: 14px; animation-delay: 0.15s; }
-  #micWave span:nth-child(5) { height: 8px;  animation-delay: 0.05s; }
+  #listenWave span:nth-child(1) { height: 7px; animation-delay: 0s; }
+  #listenWave span:nth-child(2) { height: 15px; animation-delay: 0.12s; }
+  #listenWave span:nth-child(3) { height: 20px; animation-delay: 0.22s; }
+  #listenWave span:nth-child(4) { height: 13px; animation-delay: 0.14s; }
+  #listenWave span:nth-child(5) { height: 7px; animation-delay: 0.04s; }
   @keyframes waveBounce {
-    0%, 100% { transform: scaleY(0.4); }
+    0%, 100% { transform: scaleY(0.35); }
     50%       { transform: scaleY(1); }
   }
 
-  /* ── Self view PiP ── */
+  /* ── Patient self PiP ── */
   #selfView {
     position: fixed;
-    bottom: 130px;
-    right: 16px;
-    width: 90px;
-    height: 126px;
+    bottom: 100px; right: 14px;
+    width: 88px; height: 120px;
     border-radius: 14px;
     overflow: hidden;
-    border: 2px solid rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.14);
     background: #1a2232;
     z-index: 30;
     box-shadow: 0 4px 20px rgba(0,0,0,0.6);
   }
-  #selfVideo {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transform: scaleX(-1);
-  }
+  #selfVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
   #selfLabel {
-    position: absolute;
-    bottom: 4px;
-    left: 0; right: 0;
-    text-align: center;
-    font-size: 9px;
+    position: absolute; bottom: 3px; left: 0; right: 0;
+    text-align: center; font-size: 9px;
     color: rgba(255,255,255,0.55);
   }
 
-  /* ── Call controls bar ── */
+  /* ── Controls ── */
   #controls {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 28px;
-    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 92px;
+    display: flex; align-items: center; justify-content: center; gap: 24px;
+    background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 100%);
     z-index: 20;
   }
-
-  .ctrl-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-  }
+  .ctrl-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .ctrl-btn {
-    width: 54px; height: 54px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-    font-size: 20px;
+    width: 52px; height: 52px; border-radius: 50%; border: none;
+    cursor: pointer; font-size: 20px;
     display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.12); color: white;
+    transition: transform 0.12s, background 0.15s;
     -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    touch-action: none;
-    transition: transform 0.12s, opacity 0.15s;
   }
-  .ctrl-btn:active { transform: scale(0.9); }
-  .ctrl-lbl { font-size: 11px; color: var(--muted); }
-
-  #btnPTT {
-    width: 68px; height: 68px;
-    font-size: 24px;
-    background: var(--green);
-    color: white;
-    box-shadow: 0 0 0 0 rgba(62,207,142,0);
-    transition: transform 0.12s, background 0.12s, box-shadow 0.15s;
-  }
-  #btnPTT.recording {
-    background: var(--red);
-    transform: scale(1.08);
-    box-shadow: 0 0 0 14px rgba(240,68,68,0.2);
-  }
-  #btnPTT:disabled {
-    background: rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.3);
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-
-  .ctrl-btn.side {
-    background: rgba(255,255,255,0.12);
-    color: white;
-  }
-  .ctrl-btn.side.off { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.3); }
+  .ctrl-btn:active { transform: scale(0.88); }
+  .ctrl-btn.off { background: rgba(240,68,68,0.3); }
+  .ctrl-lbl { font-size: 11px; color: rgba(255,255,255,0.5); }
 </style>
 </head>
 <body>
 
-<!-- Full-screen Chloe -->
-<div id="callScreen">
-  <div id="chloeAvatar">陳</div>
-  <div id="chloeInfo">
-    <div id="chloeName">Chloe 陳</div>
-    <div id="chloeTitle">心宜中醫 AI 助理</div>
-  </div>
-</div>
+<!-- Chloe "video" -->
+<canvas id="chloeCanvas"></canvas>
 
-<!-- Status pill -->
-<div id="statusPill" class="conn">連接中…</div>
+<!-- Status -->
+<div id="statusPill" class="s-conn">連接中…</div>
 
-<!-- Chloe subtitle -->
+<!-- Subtitle -->
 <div id="subtitle"></div>
 
-<!-- Mic wave (recording indicator) -->
-<div id="micWave">
+<!-- Listening wave -->
+<div id="listenWave">
   <span></span><span></span><span></span><span></span><span></span>
 </div>
 
-<!-- Patient self-view -->
+<!-- Patient PiP -->
 <div id="selfView">
   <video id="selfVideo" autoplay playsinline muted></video>
   <div id="selfLabel">你</div>
 </div>
 
-<!-- Call controls -->
+<!-- Controls -->
 <div id="controls">
   <div class="ctrl-wrap">
-    <button id="btnMic" class="ctrl-btn side" onclick="toggleMic()">🎙️</button>
+    <button id="btnMic" class="ctrl-btn" onclick="toggleMic()">🎙️</button>
     <div class="ctrl-lbl">靜音</div>
   </div>
   <div class="ctrl-wrap">
-    <button id="btnPTT" disabled>🎤</button>
-    <div class="ctrl-lbl" id="pttLbl">按住說話</div>
+    <button id="btnCam" class="ctrl-btn" onclick="toggleCam()">📷</button>
+    <div class="ctrl-lbl">鏡頭</div>
   </div>
   <div class="ctrl-wrap">
-    <button id="btnCam" class="ctrl-btn side" onclick="toggleCam()">📷</button>
-    <div class="ctrl-lbl">鏡頭</div>
+    <button class="ctrl-btn" style="background:rgba(240,68,68,0.8)" onclick="endCall()">📵</button>
+    <div class="ctrl-lbl">結束</div>
   </div>
 </div>
 
@@ -287,71 +174,370 @@ const ROOM_ID   = pathParts[pathParts.length - 1];
 const wsProto   = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const WS_URL    = `${wsProto}//${location.host}/ws/voice/${ROOM_ID}`;
 
+// VAD tuning
+const VAD_THRESHOLD   = 12;   // avg frequency amplitude (0-255)
+const SPEECH_START_MS = 280;  // must detect voice for this long before recording
+const SILENCE_END_MS  = 1100; // silence duration to end recording
+const MIN_AUDIO_MS    = 400;  // discard very short clips
+const MAX_AUDIO_MS    = 18000;// auto-end after 18s
+
 // ─────────────────────────────────────────────
 // DOM
 // ─────────────────────────────────────────────
+const canvas      = document.getElementById('chloeCanvas');
+const ctx         = canvas.getContext('2d');
 const statusPill  = document.getElementById('statusPill');
-const subtitle    = document.getElementById('subtitle');
-const chloeAvatar = document.getElementById('chloeAvatar');
-const micWave     = document.getElementById('micWave');
-const btnPTT      = document.getElementById('btnPTT');
+const subtitleEl  = document.getElementById('subtitle');
+const listenWave  = document.getElementById('listenWave');
+const selfVideo   = document.getElementById('selfVideo');
 const btnMic      = document.getElementById('btnMic');
 const btnCam      = document.getElementById('btnCam');
-const pttLbl      = document.getElementById('pttLbl');
-const selfVideo   = document.getElementById('selfVideo');
 
 // ─────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────
-let ws            = null;
-let mediaRecorder = null;
-let audioChunks   = [];
-let isRecording   = false;
-let micEnabled    = true;
-let camEnabled    = true;
-let micStream     = null;
-let videoStream   = null;
-let subtitleTimer = null;
+let ws             = null;
+let micStream      = null;
+let videoStream    = null;
+let audioCtx       = null;
+let analyser       = null;
+let mediaRecorder  = null;
+let audioChunks    = [];
+let micEnabled     = true;
+let camEnabled     = true;
+let chloeIsTalking = false;  // mute VAD while Chloe speaks
+let subtitleTimer  = null;
+
+// VAD state
+let vadActive      = false;
+let isRecording    = false;
+let speechStart    = null;   // when we first detected speech
+let silenceStart   = null;   // when speech ended
+let recordStart    = null;   // when MediaRecorder started
+
+// Canvas animation
+let mouthOpen      = 0;      // 0-1
+let blinkTimer     = 0;
+let isBlinking     = false;
+let idlePhase      = 0;
+
+// ─────────────────────────────────────────────
+// Canvas — Chloe face
+// ─────────────────────────────────────────────
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function drawChloe() {
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2;
+  const faceY = H * 0.40;
+  const s = Math.min(W, H) / 580;  // scale factor
+
+  ctx.clearRect(0, 0, W, H);
+
+  // — Background: dark clinical room —
+  const bg = ctx.createRadialGradient(cx, faceY, 0, cx, H * 0.5, W * 0.85);
+  bg.addColorStop(0, '#18291e');
+  bg.addColorStop(0.5, '#0f1e14');
+  bg.addColorStop(1, '#080d09');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // subtle vignette
+  const vig = ctx.createRadialGradient(cx, H * 0.5, H * 0.2, cx, H * 0.5, H * 0.8);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // idle micro-movement
+  idlePhase += 0.012;
+  const breathY = Math.sin(idlePhase) * 2.5;
+
+  const fy = faceY + breathY;
+
+  // — White coat body —
+  ctx.fillStyle = '#f2f2f0';
+  ctx.beginPath();
+  ctx.moveTo(cx - 110 * s, fy + 160 * s);
+  ctx.bezierCurveTo(cx - 110 * s, fy + 240 * s, cx - 150 * s, H, cx - 180 * s, H);
+  ctx.lineTo(cx + 180 * s, H);
+  ctx.bezierCurveTo(cx + 150 * s, H, cx + 110 * s, fy + 240 * s, cx + 110 * s, fy + 160 * s);
+  ctx.lineTo(cx + 70 * s, fy + 120 * s);
+  ctx.lineTo(cx, fy + 100 * s);
+  ctx.lineTo(cx - 70 * s, fy + 120 * s);
+  ctx.closePath();
+  ctx.fill();
+
+  // Coat collar V
+  ctx.fillStyle = '#e0e0de';
+  ctx.beginPath();
+  ctx.moveTo(cx - 70 * s, fy + 120 * s);
+  ctx.lineTo(cx, fy + 155 * s);
+  ctx.lineTo(cx + 70 * s, fy + 120 * s);
+  ctx.lineTo(cx + 50 * s, fy + 95 * s);
+  ctx.lineTo(cx, fy + 130 * s);
+  ctx.lineTo(cx - 50 * s, fy + 95 * s);
+  ctx.closePath();
+  ctx.fill();
+
+  // Neck
+  ctx.fillStyle = '#d4946a';
+  ctx.beginPath();
+  ctx.ellipse(cx, fy + 87 * s, 22 * s, 38 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // — Face oval —
+  ctx.fillStyle = '#d4946a';
+  ctx.beginPath();
+  ctx.ellipse(cx, fy, 72 * s, 90 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Face shading — subtle depth
+  const faceShade = ctx.createRadialGradient(cx - 15 * s, fy - 10 * s, 5 * s, cx, fy, 80 * s);
+  faceShade.addColorStop(0, 'rgba(255,220,180,0.22)');
+  faceShade.addColorStop(1, 'rgba(160,80,40,0.18)');
+  ctx.fillStyle = faceShade;
+  ctx.beginPath();
+  ctx.ellipse(cx, fy, 72 * s, 90 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // — Hair —
+  ctx.fillStyle = '#140800';
+  // top
+  ctx.beginPath();
+  ctx.ellipse(cx, fy - 55 * s, 76 * s, 58 * s, 0, Math.PI, Math.PI * 2);
+  ctx.fill();
+  // left side hair
+  ctx.beginPath();
+  ctx.ellipse(cx - 72 * s, fy - 8 * s, 18 * s, 52 * s, -0.28, 0, Math.PI * 2);
+  ctx.fill();
+  // right side hair
+  ctx.beginPath();
+  ctx.ellipse(cx + 72 * s, fy - 8 * s, 18 * s, 52 * s, 0.28, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hair highlight
+  ctx.fillStyle = 'rgba(60,30,10,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(cx + 10 * s, fy - 70 * s, 30 * s, 18 * s, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // — Eyebrows —
+  ctx.strokeStyle = '#4a2a0e';
+  ctx.lineWidth = 3.2 * s;
+  ctx.lineCap = 'round';
+  [[-1, 1], [1, -1]].forEach(([d, _]) => {
+    ctx.beginPath();
+    ctx.moveTo(cx + d * 38 * s, fy - 30 * s);
+    ctx.quadraticCurveTo(cx + d * 24 * s, fy - 39 * s, cx + d * 12 * s, fy - 33 * s);
+    ctx.stroke();
+  });
+
+  // — Eyes —
+  const eyeY = fy - 18 * s;
+  const blink = isBlinking;
+  [-1, 1].forEach(side => {
+    const ex = cx + side * 24 * s;
+    if (!blink) {
+      // white
+      ctx.fillStyle = '#faf5ef';
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, 14 * s, 9 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // iris
+      ctx.fillStyle = '#2e1800';
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, 8 * s, 8 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // pupil highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.ellipse(ex + 3 * s, eyeY - 3 * s, 2.5 * s, 2.5 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // eyelid line
+      ctx.strokeStyle = '#8a4a20';
+      ctx.lineWidth = 1.5 * s;
+      ctx.beginPath();
+      ctx.moveTo(ex - 14 * s, eyeY);
+      ctx.quadraticCurveTo(ex, eyeY - 11 * s, ex + 14 * s, eyeY);
+      ctx.stroke();
+    } else {
+      // closed eye
+      ctx.strokeStyle = '#6a3a18';
+      ctx.lineWidth = 2.5 * s;
+      ctx.beginPath();
+      ctx.moveTo(ex - 13 * s, eyeY);
+      ctx.quadraticCurveTo(ex, eyeY - 8 * s, ex + 13 * s, eyeY);
+      ctx.stroke();
+    }
+    // lower lash
+    ctx.strokeStyle = '#8a4a20';
+    ctx.lineWidth = 1.2 * s;
+    ctx.beginPath();
+    ctx.moveTo(ex - 12 * s, eyeY + 2 * s);
+    ctx.quadraticCurveTo(ex, eyeY + 8 * s, ex + 12 * s, eyeY + 2 * s);
+    ctx.stroke();
+  });
+
+  // — Nose —
+  ctx.strokeStyle = '#b87858';
+  ctx.lineWidth = 1.8 * s;
+  ctx.beginPath();
+  ctx.moveTo(cx + 3 * s, fy - 2 * s);
+  ctx.quadraticCurveTo(cx + 8 * s, fy + 12 * s, cx + 4 * s, fy + 18 * s);
+  ctx.moveTo(cx - 3 * s, fy - 2 * s);
+  ctx.quadraticCurveTo(cx - 8 * s, fy + 12 * s, cx - 4 * s, fy + 18 * s);
+  ctx.stroke();
+  // nostrils
+  ctx.fillStyle = '#b07050';
+  ctx.beginPath();
+  ctx.ellipse(cx - 10 * s, fy + 19 * s, 5 * s, 3.5 * s, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + 10 * s, fy + 19 * s, 5 * s, 3.5 * s, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // — Mouth —
+  const mouthY = fy + 42 * s;
+  const mw = 24 * s;
+  const mo = mouthOpen * 14 * s;
+
+  if (mo > 2) {
+    // open mouth interior
+    ctx.fillStyle = '#4a1010';
+    ctx.beginPath();
+    ctx.ellipse(cx, mouthY + mo * 0.3, mw * 0.88, mo * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // upper teeth
+    ctx.fillStyle = '#ede8e4';
+    ctx.beginPath();
+    ctx.ellipse(cx, mouthY - mo * 0.1, mw * 0.75, mo * 0.4, 0, 0, Math.PI);
+    ctx.fill();
+  }
+  // lip outline
+  ctx.strokeStyle = '#c06058';
+  ctx.lineWidth = 2.8 * s;
+  ctx.lineCap = 'round';
+  // upper lip
+  ctx.beginPath();
+  ctx.moveTo(cx - mw, mouthY);
+  ctx.quadraticCurveTo(cx - mw * 0.5, mouthY - 8 * s, cx, mouthY - 3 * s);
+  ctx.quadraticCurveTo(cx + mw * 0.5, mouthY - 8 * s, cx + mw, mouthY);
+  ctx.stroke();
+  // lower lip
+  ctx.beginPath();
+  ctx.moveTo(cx - mw, mouthY);
+  ctx.quadraticCurveTo(cx, mouthY + 9 * s + mo, cx + mw, mouthY);
+  ctx.stroke();
+
+  // — Subtle cheek blush —
+  [-1, 1].forEach(side => {
+    const blush = ctx.createRadialGradient(cx + side * 52 * s, fy + 18 * s, 0, cx + side * 52 * s, fy + 18 * s, 22 * s);
+    blush.addColorStop(0, 'rgba(220,100,80,0.18)');
+    blush.addColorStop(1, 'rgba(220,100,80,0)');
+    ctx.fillStyle = blush;
+    ctx.beginPath();
+    ctx.ellipse(cx + side * 52 * s, fy + 18 * s, 22 * s, 16 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // — Name tag overlay —
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.roundRect(cx - 100 * s, H - 52 * s, 200 * s, 38 * s, 8 * s);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.font = `bold ${14 * s}px -apple-system, PingFang HK, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('Chloe 陳', cx, H - 33 * s);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = `${11 * s}px -apple-system, PingFang HK, sans-serif`;
+  ctx.fillText('心宜中醫 AI 助理', cx, H - 20 * s);
+
+  // — Speaking ring (when Chloe is talking) —
+  if (chloeIsTalking) {
+    const ring = ctx.createRadialGradient(cx, fy, 70 * s, cx, fy, 120 * s);
+    ring.addColorStop(0, 'rgba(62,207,142,0.12)');
+    ring.addColorStop(1, 'rgba(62,207,142,0)');
+    ctx.fillStyle = ring;
+    ctx.beginPath();
+    ctx.arc(cx, fy, 120 * s + Math.sin(idlePhase * 3) * 8 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Blink logic
+function updateBlink() {
+  blinkTimer++;
+  if (!isBlinking && blinkTimer > 180 + Math.random() * 240) {
+    isBlinking = true;
+    blinkTimer = 0;
+    setTimeout(() => { isBlinking = false; }, 120);
+  }
+}
+
+// Speaking mouth animation
+let mouthTarget = 0;
+function updateMouth() {
+  mouthTarget = chloeIsTalking
+    ? 0.3 + Math.abs(Math.sin(idlePhase * 6)) * 0.7
+    : 0;
+  mouthOpen += (mouthTarget - mouthOpen) * 0.15;
+}
+
+function renderLoop() {
+  updateBlink();
+  updateMouth();
+  drawChloe();
+  requestAnimationFrame(renderLoop);
+}
+renderLoop();
 
 // ─────────────────────────────────────────────
 // WebSocket
 // ─────────────────────────────────────────────
 function connect() {
   ws = new WebSocket(WS_URL);
-  ws.onopen  = () => setStatus('conn', '連接中…');
+  ws.onopen  = () => setStatus('s-conn', '連接中…');
   ws.onmessage = async ({ data }) => {
     let msg; try { msg = JSON.parse(data); } catch { return; }
     switch (msg.type) {
       case 'ready':
-        setStatus('idle', '已連線');
-        btnPTT.disabled = false;
+        setStatus('s-idle', '已連線 · 正在聆聽');
+        startVAD();
         break;
       case 'status':
-        if (msg.text.includes('聽')) setStatus('listening', msg.text);
-        else if (msg.text.includes('諗')) setStatus('thinking', msg.text);
-        else if (msg.text.includes('回')) setStatus('speaking', msg.text);
-        break;
-      case 'transcript':
-        setStatus('listening', '收到：' + msg.text.slice(0, 20) + (msg.text.length > 20 ? '…' : ''));
+        if (msg.text.includes('聽')) setStatus('s-listening', '聽緊…');
+        else if (msg.text.includes('諗')) setStatus('s-thinking', 'Chloe 諗緊…');
+        else if (msg.text.includes('回')) setStatus('s-speaking', 'Chloe 回緊…');
         break;
       case 'response':
-        setStatus('idle', '已連線');
         showSubtitle(msg.text);
         if (msg.audio_b64) {
-          await playAudio(msg.audio_b64);  // resetPTT() called inside onended
+          await playAudio(msg.audio_b64);
         } else {
-          resetPTT();  // no audio → re-enable immediately
+          chloeIsTalking = false;
+          resumeVAD();
+          setStatus('s-idle', '已連線 · 正在聆聽');
         }
         break;
       case 'error':
-        setStatus('error', msg.text);
-        btnPTT.disabled = false;
-        setTimeout(() => setStatus('idle', '已連線'), 3000);
+        setStatus('s-error', msg.text);
+        resumeVAD();
+        setTimeout(() => setStatus('s-idle', '已連線 · 正在聆聽'), 3000);
         break;
     }
   };
-  ws.onerror  = () => setStatus('error', '連線錯誤');
-  ws.onclose  = () => { setStatus('conn', '重新連接…'); btnPTT.disabled = true; setTimeout(connect, 3000); };
+  ws.onerror  = () => setStatus('s-error', '連線錯誤');
+  ws.onclose  = () => {
+    setStatus('s-conn', '重新連接…');
+    stopVAD();
+    setTimeout(connect, 3000);
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -359,7 +545,7 @@ function connect() {
 // ─────────────────────────────────────────────
 async function setupMedia() {
   try {
-    const full = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    const full = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } });
     micStream   = new MediaStream(full.getAudioTracks());
     videoStream = new MediaStream(full.getVideoTracks());
     selfVideo.srcObject = videoStream;
@@ -367,95 +553,191 @@ async function setupMedia() {
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       document.getElementById('selfView').style.display = 'none';
-    } catch { setStatus('error', '無法開啟麥克風'); }
+    } catch {
+      setStatus('s-error', '請允許麥克風權限');
+    }
+  }
+
+  if (micStream) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser  = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    const src = audioCtx.createMediaStreamSource(micStream);
+    src.connect(analyser);
   }
 }
 
 // ─────────────────────────────────────────────
-// Push-to-talk
+// VAD — Voice Activity Detection
 // ─────────────────────────────────────────────
-function startRecording() {
-  if (isRecording || !micStream || btnPTT.disabled) return;
-  isRecording = true;
-  audioChunks = [];
-  btnPTT.classList.add('recording');
-  btnPTT.textContent = '🔴';
-  pttLbl.textContent = '錄音中…';
-  micWave.classList.add('show');
+let vadInterval = null;
+const freqData  = new Uint8Array(256);
 
-  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+function getAmplitude() {
+  if (!analyser) return 0;
+  analyser.getByteFrequencyData(freqData);
+  let sum = 0;
+  for (let i = 2; i < 80; i++) sum += freqData[i]; // focus on speech frequencies
+  return sum / 78;
+}
+
+function startVAD() {
+  vadActive = true;
+  vadInterval = setInterval(vadTick, 50);
+}
+
+function stopVAD() {
+  vadActive = false;
+  clearInterval(vadInterval);
+  if (isRecording) abortRecording();
+}
+
+function resumeVAD() {
+  if (!vadActive) startVAD();
+  listenWave.classList.remove('show');
+}
+
+function vadTick() {
+  if (!vadActive || chloeIsTalking || !micEnabled) return;
+
+  const amp = getAmplitude();
+  const now  = Date.now();
+
+  if (amp > VAD_THRESHOLD) {
+    // ── Voice detected ──
+    silenceStart = null;
+
+    if (!isRecording) {
+      if (speechStart === null) {
+        speechStart = now;
+      } else if (now - speechStart > SPEECH_START_MS) {
+        startRecording();
+      }
+    } else {
+      // auto-stop after max
+      if (now - recordStart > MAX_AUDIO_MS) stopRecording();
+    }
+  } else {
+    // ── Silence ──
+    speechStart = null;
+
+    if (isRecording) {
+      if (silenceStart === null) {
+        silenceStart = now;
+      } else if (now - silenceStart > SILENCE_END_MS) {
+        stopRecording();
+      }
+    }
+  }
+}
+
+function startRecording() {
+  if (isRecording || !micStream) return;
+  isRecording = true;
+  recordStart = Date.now();
+  audioChunks = [];
+  listenWave.classList.add('show');
+  setStatus('s-listening', '聆聽中…');
+
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus' : 'audio/webm';
-  mediaRecorder = new MediaRecorder(micStream, { mimeType });
+  mediaRecorder = new MediaRecorder(micStream, { mimeType: mime });
   mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-  mediaRecorder.onstop = sendAudio;
+  mediaRecorder.onstop = onRecordingStop;
   mediaRecorder.start(100);
 }
 
 function stopRecording() {
   if (!isRecording) return;
-  isRecording = false;
-  btnPTT.classList.remove('recording');
-  btnPTT.textContent = '🎤';
-  pttLbl.textContent = '處理中…';
-  micWave.classList.remove('show');
+  isRecording   = false;
+  speechStart   = null;
+  silenceStart  = null;
+  listenWave.classList.remove('show');
   mediaRecorder?.stop();
-  btnPTT.disabled = true;
 }
 
-async function sendAudio() {
-  if (!audioChunks.length) { resetPTT(); return; }
+function abortRecording() {
+  isRecording = false;
+  speechStart = silenceStart = null;
+  listenWave.classList.remove('show');
+  try { mediaRecorder?.stop(); } catch {}
+  audioChunks = [];
+}
+
+async function onRecordingStop() {
+  const duration = Date.now() - recordStart;
+  if (audioChunks.length === 0 || duration < MIN_AUDIO_MS) {
+    setStatus('s-idle', '已連線 · 正在聆聽');
+    return;
+  }
+  // Pause VAD while waiting for response
+  stopVAD();
+  setStatus('s-thinking', '傳送中…');
+
   const blob   = new Blob(audioChunks, { type: 'audio/webm' });
   const buffer = await blob.arrayBuffer();
   if (ws?.readyState === WebSocket.OPEN) ws.send(buffer);
   audioChunks = [];
 }
 
-function resetPTT() {
-  pttLbl.textContent = '按住說話';
-  btnPTT.disabled    = false;
-}
-
 // ─────────────────────────────────────────────
-// Audio playback
+// Audio playback — AudioContext for reliability
 // ─────────────────────────────────────────────
 async function playAudio(b64) {
-  chloeAvatar.classList.add('speaking');
+  chloeIsTalking = true;
+  setStatus('s-speaking', 'Chloe 正在說話…');
   try {
-    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    const blob  = new Blob([bytes], { type: 'audio/mpeg' });
-    const url   = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.onended = () => { URL.revokeObjectURL(url); chloeAvatar.classList.remove('speaking'); resetPTT(); };
-    await audio.play();
-  } catch { chloeAvatar.classList.remove('speaking'); resetPTT(); }
+    if (!audioCtx || audioCtx.state === 'closed') {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+    const bytes  = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const decoded = await audioCtx.decodeAudioData(bytes.buffer);
+    const source  = audioCtx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(audioCtx.destination);
+    source.start(0);
+    source.onended = () => {
+      chloeIsTalking = false;
+      // Wait 400ms before listening again (prevents echo triggering VAD)
+      setTimeout(() => {
+        setStatus('s-idle', '已連線 · 正在聆聽');
+        resumeVAD();
+      }, 400);
+    };
+  } catch (e) {
+    console.warn('Audio decode/play failed:', e);
+    chloeIsTalking = false;
+    setStatus('s-idle', '已連線 · 正在聆聽');
+    resumeVAD();
+  }
 }
 
 // ─────────────────────────────────────────────
-// Subtitle (fades after 6s)
+// Subtitle
 // ─────────────────────────────────────────────
 function showSubtitle(text) {
-  subtitle.textContent = text;
-  subtitle.classList.add('show');
+  subtitleEl.textContent = text;
+  subtitleEl.classList.add('show');
   clearTimeout(subtitleTimer);
-  subtitleTimer = setTimeout(() => subtitle.classList.remove('show'), 6000);
+  subtitleTimer = setTimeout(() => subtitleEl.classList.remove('show'), 7000);
 }
 
 // ─────────────────────────────────────────────
-// Status pill
+// UI helpers
 // ─────────────────────────────────────────────
 function setStatus(cls, text) {
   statusPill.className = cls;
   statusPill.textContent = text;
 }
 
-// ─────────────────────────────────────────────
-// Mic / cam toggles
-// ─────────────────────────────────────────────
 function toggleMic() {
   micEnabled = !micEnabled;
   micStream?.getAudioTracks().forEach(t => { t.enabled = micEnabled; });
   btnMic.textContent = micEnabled ? '🎙️' : '🔇';
   btnMic.classList.toggle('off', !micEnabled);
+  if (!micEnabled && isRecording) abortRecording();
 }
 
 function toggleCam() {
@@ -466,14 +748,25 @@ function toggleCam() {
   document.getElementById('selfView').style.opacity = camEnabled ? '1' : '0.3';
 }
 
-// ─────────────────────────────────────────────
-// PTT event bindings
-// ─────────────────────────────────────────────
-btnPTT.addEventListener('mousedown',  e => { e.preventDefault(); startRecording(); });
-btnPTT.addEventListener('mouseup',    e => { e.preventDefault(); stopRecording(); });
-btnPTT.addEventListener('mouseleave', () => { if (isRecording) stopRecording(); });
-btnPTT.addEventListener('touchstart', e => { e.preventDefault(); startRecording(); }, { passive: false });
-btnPTT.addEventListener('touchend',   e => { e.preventDefault(); stopRecording(); },  { passive: false });
+function endCall() {
+  stopVAD();
+  if (ws) { ws.onclose = null; ws.close(); }
+  micStream?.getTracks().forEach(t => t.stop());
+  videoStream?.getTracks().forEach(t => t.stop());
+  document.body.innerHTML = `
+    <div style="height:100vh;display:flex;flex-direction:column;align-items:center;
+                justify-content:center;gap:16px;background:#0b0f0c;color:#e8edf2;
+                font-family:-apple-system,PingFang HK,sans-serif;text-align:center;padding:32px">
+      <div style="font-size:48px">✅</div>
+      <div style="font-size:20px;font-weight:600">診症完畢</div>
+      <div style="font-size:14px;color:rgba(255,255,255,0.5);line-height:1.6">
+        感謝使用心宜中醫視頻診症<br>如需跟進，請透過 WhatsApp 聯絡
+      </div>
+      <button onclick="window.close()" style="margin-top:8px;padding:12px 32px;
+        background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);
+        border-radius:999px;color:#e8edf2;font-size:15px;cursor:pointer">關閉視窗</button>
+    </div>`;
+}
 
 // ─────────────────────────────────────────────
 // Init
