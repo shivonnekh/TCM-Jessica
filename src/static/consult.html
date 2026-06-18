@@ -337,8 +337,11 @@ function connect() {
       case 'response':
         setStatus('idle', '已連線');
         showSubtitle(msg.text);
-        if (msg.audio_b64) await playAudio(msg.audio_b64);
-        btnPTT.disabled = false;
+        if (msg.audio_b64) {
+          await playAudio(msg.audio_b64);  // resetPTT() called inside onended
+        } else {
+          resetPTT();  // no audio → re-enable immediately
+        }
         break;
       case 'error':
         setStatus('error', msg.text);
