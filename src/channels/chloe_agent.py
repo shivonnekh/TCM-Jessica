@@ -31,6 +31,9 @@ from src.crm.models import ConversationMessage
 
 logger = logging.getLogger("channels.chloe")
 
+# Base URL for consultation links (override via CONSULT_BASE_URL env var)
+_DEFAULT_CONSULT_BASE: Final[str] = "https://tcm-jessica.onrender.com"
+
 _DEFAULT_PERSONA_PATH: Final[str] = str(
     Path(__file__).resolve().parent.parent.parent / "data" / "personas" / "chloe.json"
 )
@@ -91,10 +94,12 @@ def load_persona() -> ChloePersona:
 class ChloeAgent:
     """Single-LLM-call social DM agent. Greeting-first, CRM-backed."""
 
-    def __init__(self, client, crm) -> None:
+    def __init__(self, client, crm, consultation_repo=None) -> None:
         # client: src.llm.LLMClient ; crm: CRM repo (same instance as pipeline)
+        # consultation_repo: src.consultation.repo.ConsultationRepo (optional)
         self._client = client
         self._crm = crm
+        self._consult = consultation_repo
 
     async def respond(
         self, *, crm_key: str, user_message: str, message_id: str | None = None
@@ -124,8 +129,16 @@ class ChloeAgent:
         # 2. Decide whether we need the LLM. On a first-touch PURE greeting
         # (just "hi"/"你好"), the intro greeting IS the whole reply — no LLM
         # call, and no redundant second greeting. Otherwise generate an answer.
+        # Booking intent short-circuits LLM — creates a video room immediately.
         need_llm = not (is_first_touch and _is_pure_greeting(user_message))
         answer_bubbles: list[str] = []
+        if need_llm and _is_booking_intent(user_message) and self._consult is not None:
+            try:
+                answer_bubbles = await self._handle_booking(crm_key)
+                need_llm = False
+            except Exception:  # noqa: BLE001
+                logger.exception("[chloe] booking flow failed for %s", crm_key)
+                # Fall through to LLM so user still gets a reply
         if need_llm:
             try:
                 turns = _count_user_turns(history)
@@ -155,6 +168,18 @@ class ChloeAgent:
         return ChloeReply(bubbles=bubbles, media=media)
 
     # ------------------------------------------------------------------
+
+    async def _handle_booking(self, crm_key: str) -> list[str]:
+        """Create a video consultation room and return the patient link bubbles."""
+        consult = await self._consult.create(crm_key=crm_key)
+        base = os.environ.get("CONSULT_BASE_URL", _DEFAULT_CONSULT_BASE).rstrip("/")
+        patient_url = f"{base}{consult.patient_url}"
+        logger.info("[chloe] booking room=%s crm=%s url=%s", consult.id, crm_key, patient_url)
+        return [
+            "好的！我幫你安排咗一個視頻診症房間 🌿",
+            f"請點擊以下連結加入：\n{patient_url}",
+            "醫師確認時間後會喺同一連結加入，記得開鏡頭同麥克風 📷 如有問題可以 WhatsApp 我哋 🙏",
+        ]
 
     async def _generate(
         self,
@@ -210,6 +235,19 @@ class ChloeAgent:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+# Booking / consultation intent — triggers video room creation.
+_BOOKING_INTENT_RE = re.compile(
+    r"約診|預約|睇診|睇醫生|睇醫師|約醫生|約醫師|想睇醫|幫我約|book(?:ing)?|"
+    r"consultation|視頻診症|video\s*call|診症|想約|可以約",
+    re.IGNORECASE,
+)
+
+
+def _is_booking_intent(text: str) -> bool:
+    """True when the message expresses intent to book a consultation."""
+    return bool(_BOOKING_INTENT_RE.search((text or "").strip()))
 
 
 # Whole-message greeting (no health content) → first-touch intro is enough.
