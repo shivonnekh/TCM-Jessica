@@ -15,13 +15,58 @@
     touch-action: manipulation;
   }
 
-  /* ── Chloe full-screen canvas "video" ── */
-  #chloeCanvas {
+  /* ── Chloe full-screen photo "video" ── */
+  #chloeVideo {
     position: fixed;
     inset: 0;
+    overflow: hidden;
+    background: #0b0f0c;
+  }
+  #chloeImg {
     width: 100%;
     height: 100%;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
+    transition: filter 0.4s;
   }
+  /* Dim slightly while thinking */
+  #chloeVideo.thinking #chloeImg { filter: brightness(0.88); }
+  /* Green glow border when Chloe speaks */
+  #chloeVideo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 0;
+    opacity: 0;
+    transition: opacity 0.3s;
+    box-shadow: inset 0 0 60px rgba(62,207,142,0.35), inset 0 0 20px rgba(62,207,142,0.2);
+  }
+  #chloeVideo.speaking::after {
+    opacity: 1;
+    animation: speakPulse 1.3s ease-in-out infinite;
+  }
+  @keyframes speakPulse {
+    0%, 100% { box-shadow: inset 0 0 50px rgba(62,207,142,0.25), inset 0 0 15px rgba(62,207,142,0.15); }
+    50%       { box-shadow: inset 0 0 90px rgba(62,207,142,0.45), inset 0 0 30px rgba(62,207,142,0.3); }
+  }
+  /* Name tag overlay */
+  #chloeName {
+    position: absolute;
+    bottom: 100px;
+    left: 20px;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(6px);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+    pointer-events: none;
+    z-index: 5;
+  }
+  #chloeName span { font-size: 11px; font-weight: 400; color: rgba(255,255,255,0.55); margin-left: 6px; }
 
   /* ── Status pill ── */
   #statusPill {
@@ -130,7 +175,10 @@
 <body>
 
 <!-- Chloe "video" -->
-<canvas id="chloeCanvas"></canvas>
+<div id="chloeVideo">
+  <img id="chloeImg" src="/static/chloe.jpg" alt="Chloe">
+  <div id="chloeName">Chloe 陳<span>心宜中醫 AI 助理</span></div>
+</div>
 
 <!-- Status -->
 <div id="statusPill" class="s-conn">連接中…</div>
@@ -185,8 +233,7 @@ let   dynamicThreshold = VAD_THRESHOLD; // updated by calibrateNoise()
 // ─────────────────────────────────────────────
 // DOM
 // ─────────────────────────────────────────────
-const canvas      = document.getElementById('chloeCanvas');
-const ctx         = canvas.getContext('2d');
+const chloeVideo  = document.getElementById('chloeVideo');
 const statusPill  = document.getElementById('statusPill');
 const subtitleEl  = document.getElementById('subtitle');
 const listenWave  = document.getElementById('listenWave');
@@ -206,7 +253,7 @@ let mediaRecorder  = null;
 let audioChunks    = [];
 let micEnabled     = true;
 let camEnabled     = true;
-let chloeIsTalking = false;  // mute VAD while Chloe speaks
+let chloeIsTalking = false;
 let subtitleTimer  = null;
 
 // VAD state
@@ -216,22 +263,15 @@ let speechStart    = null;   // when we first detected speech
 let silenceStart   = null;   // when speech ended
 let recordStart    = null;   // when MediaRecorder started
 
-// Canvas animation
-let mouthOpen      = 0;      // 0-1
-let blinkTimer     = 0;
-let isBlinking     = false;
-let idlePhase      = 0;
+// ─────────────────────────────────────────────
+// Chloe visual state
+// ─────────────────────────────────────────────
 
-// ─────────────────────────────────────────────
-// Canvas — Chloe face
-// ─────────────────────────────────────────────
-function resizeCanvas() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
+function setChloeState(state) {
+  chloeVideo.className = state; // '' | 'speaking' | 'thinking'
 }
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
 
+// --- REMOVE: old canvas drawChloe (replaced by photo) ---
 function drawChloe() {
   const W = canvas.width, H = canvas.height;
   const cx = W / 2;
@@ -471,32 +511,6 @@ function drawChloe() {
   }
 }
 
-// Blink logic
-function updateBlink() {
-  blinkTimer++;
-  if (!isBlinking && blinkTimer > 180 + Math.random() * 240) {
-    isBlinking = true;
-    blinkTimer = 0;
-    setTimeout(() => { isBlinking = false; }, 120);
-  }
-}
-
-// Speaking mouth animation
-let mouthTarget = 0;
-function updateMouth() {
-  mouthTarget = chloeIsTalking
-    ? 0.3 + Math.abs(Math.sin(idlePhase * 6)) * 0.7
-    : 0;
-  mouthOpen += (mouthTarget - mouthOpen) * 0.15;
-}
-
-function renderLoop() {
-  updateBlink();
-  updateMouth();
-  drawChloe();
-  requestAnimationFrame(renderLoop);
-}
-renderLoop();
 
 // ─────────────────────────────────────────────
 // WebSocket
@@ -512,9 +526,9 @@ function connect() {
         startVAD();
         break;
       case 'status':
-        if (msg.text.includes('聽')) setStatus('s-listening', '聽緊…');
-        else if (msg.text.includes('諗')) setStatus('s-thinking', 'Chloe 諗緊…');
-        else if (msg.text.includes('回')) setStatus('s-speaking', 'Chloe 回緊…');
+        if (msg.text.includes('聽')) { setStatus('s-listening', '聆聽中…'); setChloeState(''); }
+        else if (msg.text.includes('諗')) { setStatus('s-thinking', 'Chloe 諗緊…'); setChloeState('thinking'); }
+        else if (msg.text.includes('回')) { setStatus('s-speaking', 'Chloe 回緊…'); setChloeState('speaking'); }
         break;
       case 'response':
         showSubtitle(msg.text);
@@ -522,6 +536,7 @@ function connect() {
           await playAudio(msg.audio_b64);
         } else {
           chloeIsTalking = false;
+          setChloeState('');
           resumeVAD();
           setStatus('s-idle', '已連線 · 正在聆聽');
         }
@@ -694,7 +709,9 @@ function abortRecording() {
 
 async function onRecordingStop() {
   const duration = Date.now() - recordStart;
+  console.log('[VAD] recording stopped. duration=', duration, 'chunks=', audioChunks.length);
   if (audioChunks.length === 0 || duration < MIN_AUDIO_MS) {
+    console.log('[VAD] too short, discarding');
     setStatus('s-idle', '已連線 · 正在聆聽');
     return;
   }
@@ -728,7 +745,7 @@ async function playAudio(b64) {
     source.start(0);
     source.onended = () => {
       chloeIsTalking = false;
-      // Wait 400ms before listening again (prevents echo triggering VAD)
+      setChloeState('');
       setTimeout(() => {
         setStatus('s-idle', '已連線 · 正在聆聽');
         resumeVAD();
@@ -737,6 +754,7 @@ async function playAudio(b64) {
   } catch (e) {
     console.warn('Audio decode/play failed:', e);
     chloeIsTalking = false;
+    setChloeState('');
     setStatus('s-idle', '已連線 · 正在聆聽');
     resumeVAD();
   }
