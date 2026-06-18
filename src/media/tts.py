@@ -90,6 +90,19 @@ class TTSResult:
 # ── Public API ────────────────────────────────────────────────────
 
 
+async def force_synthesize(text: str, *, voice: str | None = None) -> bytes | None:
+    """Like ``synthesize`` but bypasses TTS_ENABLED — always calls MiniMax.
+
+    Used by the voice consultation feature which needs TTS regardless of the
+    WhatsApp TTS toggle. Returns raw MP3 bytes or None on failure.
+    """
+    cleaned = _clean_for_speech(text)
+    if not cleaned.strip():
+        return None
+    voice_id = (voice or os.environ.get("MINIMAX_TTS_VOICE") or _DEFAULT_VOICE).strip()
+    return await _call_minimax(cleaned, voice_id)
+
+
 async def synthesize(
     text: str,
     *,

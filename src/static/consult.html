@@ -3,19 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>心宜中醫 · 視頻診症</title>
+<title>心宜中醫 · 語音診症</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg:        #0b0f14;
-    --surface:   #141920;
-    --green:     #3ecf8e;
-    --red:       #f04444;
-    --amber:     #f0a844;
-    --text:      #e8edf2;
-    --muted:     #6b7888;
-    --radius:    14px;
+    --bg:       #0b0f14;
+    --surface:  #141920;
+    --card:     #1a2232;
+    --green:    #3ecf8e;
+    --red:      #f04444;
+    --amber:    #f0a844;
+    --text:     #e8edf2;
+    --muted:    #6b7888;
+    --border:   rgba(255,255,255,0.07);
+    --radius:   16px;
   }
 
   html, body {
@@ -24,352 +26,284 @@
     color: var(--text);
     font-family: -apple-system, "PingFang HK", "Noto Sans HK", sans-serif;
     overflow: hidden;
-    touch-action: manipulation;
   }
 
-  /* ── Layout ── */
   #app {
-    position: relative;
-    width: 100vw;
-    height: 100dvh;
     display: flex;
     flex-direction: column;
+    height: 100dvh;
+    max-width: 520px;
+    margin: 0 auto;
   }
 
-  /* Remote video — fills the whole screen */
-  #remoteVideo {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    background: var(--bg);
-    display: block;
-  }
-
-  /* Self view — bottom-right pip */
-  #localVideo {
-    position: absolute;
-    bottom: 90px;
-    right: 16px;
-    width: 110px;
-    height: 150px;
-    object-fit: cover;
-    border-radius: var(--radius);
-    border: 2px solid rgba(255,255,255,0.15);
-    background: #1a2130;
-    z-index: 10;
-    cursor: pointer;
-    transition: opacity 0.2s;
-  }
-  #localVideo:hover { opacity: 0.85; }
-
-  /* ── Header bar ── */
+  /* ── Header ── */
   #header {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    z-index: 20;
-    padding: 16px 20px 12px;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
     display: flex;
     align-items: center;
     gap: 10px;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
-  #header .logo {
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: var(--text);
-    opacity: 0.9;
-  }
-  #header .role-badge {
-    font-size: 11px;
-    padding: 3px 9px;
+  .logo { font-size: 15px; font-weight: 600; letter-spacing: 0.3px; }
+  #connStatus {
+    margin-left: auto;
+    font-size: 12px;
+    padding: 3px 10px;
     border-radius: 999px;
     font-weight: 500;
-    letter-spacing: 0.3px;
   }
-  .role-badge.patient      { background: rgba(62,207,142,0.2); color: var(--green); }
-  .role-badge.practitioner { background: rgba(240,168,68,0.2); color: var(--amber); }
+  #connStatus.connecting { background: rgba(240,168,68,0.15); color: var(--amber); }
+  #connStatus.ready      { background: rgba(62,207,142,0.15); color: var(--green); }
+  #connStatus.error      { background: rgba(240,68,68,0.15);  color: var(--red); }
 
-  #duration {
-    margin-left: auto;
-    font-size: 13px;
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* ── Status overlay ── */
-  #statusOverlay {
-    position: absolute;
-    inset: 0;
-    z-index: 15;
+  /* ── Chloe avatar ── */
+  #avatarSection {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 16px;
-    background: var(--bg);
-    transition: opacity 0.4s;
+    padding: 28px 20px 20px;
+    flex-shrink: 0;
   }
-  #statusOverlay.hidden { opacity: 0; pointer-events: none; }
+  #avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1e7c56 0%, #2db67d 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: -1px;
+    position: relative;
+    transition: box-shadow 0.3s;
+  }
+  #avatar.speaking {
+    box-shadow: 0 0 0 6px rgba(62,207,142,0.25), 0 0 0 12px rgba(62,207,142,0.1);
+    animation: speakPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes speakPulse {
+    0%, 100% { box-shadow: 0 0 0 6px rgba(62,207,142,0.25), 0 0 0 12px rgba(62,207,142,0.08); }
+    50%       { box-shadow: 0 0 0 10px rgba(62,207,142,0.2), 0 0 0 20px rgba(62,207,142,0.05); }
+  }
+  #avatarName { margin-top: 12px; font-size: 17px; font-weight: 600; }
+  #avatarTitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-  .status-icon {
+  #statusText {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--muted);
+    height: 18px;
+    text-align: center;
+    transition: color 0.2s;
+  }
+  #statusText.active { color: var(--green); }
+
+  /* ── Chat transcript ── */
+  #transcript {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scroll-behavior: smooth;
+  }
+  #transcript::-webkit-scrollbar { width: 4px; }
+  #transcript::-webkit-scrollbar-track { background: transparent; }
+  #transcript::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .bubble {
+    max-width: 82%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.55;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .bubble.user {
+    align-self: flex-end;
+    background: #1e4a36;
+    color: #d4f5e5;
+    border-bottom-right-radius: 4px;
+  }
+  .bubble.chloe {
+    align-self: flex-start;
+    background: var(--card);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+  }
+  .bubble.system {
+    align-self: center;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 2px 0;
+  }
+  .bubble.typing {
+    align-self: flex-start;
+    background: var(--card);
+    padding: 12px 16px;
+  }
+  .typing-dots span {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    animation: typingBounce 1.2s infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30%            { transform: translateY(-5px); opacity: 1; }
+  }
+
+  /* ── PTT controls ── */
+  #controls {
+    flex-shrink: 0;
+    padding: 16px 20px 32px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #pttHint {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  #btnPTT {
     width: 72px;
     height: 72px;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-  }
-  .status-icon.waiting  { background: rgba(62,207,142,0.12); animation: pulse 2s infinite; }
-  .status-icon.calling  { background: rgba(240,168,68,0.12); }
-  .status-icon.error    { background: rgba(240,68,68,0.12); }
-
-  @keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50%       { transform: scale(1.08); opacity: 0.7; }
-  }
-
-  #statusText {
-    font-size: 17px;
-    font-weight: 500;
-    text-align: center;
-    padding: 0 32px;
-    line-height: 1.5;
-    color: var(--text);
-  }
-  #statusSub {
-    font-size: 13px;
-    color: var(--muted);
-    text-align: center;
-    padding: 0 40px;
-    line-height: 1.6;
-  }
-
-  /* ── Controls bar ── */
-  #controls {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    z-index: 20;
-    padding: 16px 0 28px;
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
-  }
-
-  .ctrl-btn {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
     border: none;
+    background: var(--green);
+    color: white;
+    font-size: 26px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
-    transition: transform 0.15s, opacity 0.15s;
+    transition: transform 0.12s, background 0.12s, box-shadow 0.12s;
     -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: none;
   }
-  .ctrl-btn:active { transform: scale(0.92); }
-  .ctrl-btn.active   { background: rgba(255,255,255,0.15); }
-  .ctrl-btn.inactive { background: rgba(255,255,255,0.07); opacity: 0.55; }
-  .ctrl-btn.danger   { background: var(--red); }
-  .ctrl-btn.danger:active { background: #c03333; }
-
-  .ctrl-label {
-    font-size: 10px;
+  #btnPTT:active, #btnPTT.recording {
+    transform: scale(1.1);
+    background: #f04444;
+    box-shadow: 0 0 0 12px rgba(240,68,68,0.15);
+  }
+  #btnPTT:disabled {
+    background: var(--surface);
     color: var(--muted);
-    margin-top: 4px;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  #recLabel {
+    font-size: 12px;
+    color: var(--muted);
+    height: 16px;
     text-align: center;
     letter-spacing: 0.2px;
   }
+  #recLabel.recording { color: var(--red); }
 
-  .ctrl-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
+  /* ── Mic level bar ── */
+  #micBar {
+    width: 120px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    visibility: hidden;
   }
-
-  /* ── Ended screen ── */
-  #endedScreen {
-    display: none;
-    position: absolute;
-    inset: 0;
-    z-index: 30;
-    background: var(--bg);
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-    text-align: center;
-    padding: 32px;
+  #micBarFill {
+    height: 100%;
+    width: 0%;
+    background: var(--red);
+    border-radius: 2px;
+    transition: width 0.05s;
   }
-  #endedScreen.show { display: flex; }
-  #endedScreen h2 { font-size: 22px; font-weight: 600; }
-  #endedScreen p  { font-size: 14px; color: var(--muted); line-height: 1.6; }
-  .end-icon { font-size: 48px; }
-  .close-btn {
-    margin-top: 8px;
-    padding: 12px 32px;
-    background: var(--surface);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 999px;
-    color: var(--text);
-    font-size: 15px;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .close-btn:hover { background: #1e2736; }
 </style>
 </head>
 <body>
 <div id="app">
 
-  <!-- Remote video (full screen) -->
-  <video id="remoteVideo" autoplay playsinline></video>
-
-  <!-- Self view (pip) -->
-  <video id="localVideo" autoplay playsinline muted></video>
-
-  <!-- Header -->
   <div id="header">
     <span class="logo">心宜中醫</span>
-    <span id="roleBadge" class="role-badge"></span>
-    <span id="duration"></span>
+    <span id="connStatus" class="connecting">連接中…</span>
   </div>
 
-  <!-- Status overlay (shown when no remote stream) -->
-  <div id="statusOverlay">
-    <div id="statusIcon" class="status-icon waiting">📡</div>
-    <div id="statusText">連接中…</div>
-    <div id="statusSub"></div>
+  <div id="avatarSection">
+    <div id="avatar">陳</div>
+    <div id="avatarName">Chloe 陳</div>
+    <div id="avatarTitle">心宜中醫 AI 助理</div>
+    <div id="statusText">–</div>
   </div>
 
-  <!-- Controls -->
+  <div id="transcript"></div>
+
   <div id="controls">
-    <div class="ctrl-wrap">
-      <button id="btnMic" class="ctrl-btn active" onclick="toggleMic()" title="靜音">🎙️</button>
-      <div class="ctrl-label">靜音</div>
-    </div>
-    <div class="ctrl-wrap">
-      <button id="btnCam" class="ctrl-btn active" onclick="toggleCam()" title="關鏡頭">📷</button>
-      <div class="ctrl-label">鏡頭</div>
-    </div>
-    <div class="ctrl-wrap">
-      <button class="ctrl-btn danger" onclick="hangUp()" title="結束">📵</button>
-      <div class="ctrl-label">結束</div>
-    </div>
-  </div>
-
-  <!-- Ended screen -->
-  <div id="endedScreen">
-    <div class="end-icon">✅</div>
-    <h2>診症完畢</h2>
-    <p>感謝您使用心宜中醫視頻診症服務。<br>如有需要，請透過 WhatsApp 跟進。</p>
-    <button class="close-btn" onclick="window.close()">關閉視窗</button>
+    <div id="micBar"><div id="micBarFill"></div></div>
+    <button id="btnPTT" disabled>🎙️</button>
+    <div id="recLabel">按住說話</div>
+    <div id="pttHint">按住 🎙️ 說話，放開發送</div>
   </div>
 
 </div>
 
 <script>
-// ─────────────────────────────────────────
-// Config from URL
-// ─────────────────────────────────────────
-const pathParts = window.location.pathname.split('/');
-const ROOM_ID   = pathParts[pathParts.length - 1];
-const params    = new URLSearchParams(window.location.search);
-const ROLE      = params.get('role') || 'patient'; // patient | practitioner
+// ─────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────
+const pathParts  = window.location.pathname.split('/').filter(Boolean);
+const ROOM_ID    = pathParts[pathParts.length - 1];
+const wsProto    = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL     = `${wsProto}//${location.host}/ws/voice/${ROOM_ID}`;
 
-const wsProto   = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const WS_URL    = `${wsProto}//${location.host}/ws/consultation/${ROOM_ID}/${ROLE}`;
-const ICE_URL   = '/api/consultation/ice-config';
+// ─────────────────────────────────────────────
+// DOM
+// ─────────────────────────────────────────────
+const connStatus  = document.getElementById('connStatus');
+const statusText  = document.getElementById('statusText');
+const avatarEl    = document.getElementById('avatar');
+const transcript  = document.getElementById('transcript');
+const btnPTT      = document.getElementById('btnPTT');
+const recLabel    = document.getElementById('recLabel');
+const micBar      = document.getElementById('micBar');
+const micBarFill  = document.getElementById('micBarFill');
 
-// ─────────────────────────────────────────
-// DOM refs
-// ─────────────────────────────────────────
-const remoteVideo   = document.getElementById('remoteVideo');
-const localVideo    = document.getElementById('localVideo');
-const statusOverlay = document.getElementById('statusOverlay');
-const statusIcon    = document.getElementById('statusIcon');
-const statusText    = document.getElementById('statusText');
-const statusSub     = document.getElementById('statusSub');
-const roleBadge     = document.getElementById('roleBadge');
-const durationEl    = document.getElementById('duration');
-const endedScreen   = document.getElementById('endedScreen');
-const btnMic        = document.getElementById('btnMic');
-const btnCam        = document.getElementById('btnCam');
-
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────
 // State
-// ─────────────────────────────────────────
-let pc        = null;  // RTCPeerConnection
-let ws        = null;  // WebSocket
-let localStream     = null;
-let micEnabled      = true;
-let camEnabled      = true;
-let callStarted     = false;
-let durationTimer   = null;
-let callSeconds     = 0;
+// ─────────────────────────────────────────────
+let ws            = null;
+let mediaRecorder = null;
+let audioChunks   = [];
+let isRecording   = false;
+let audioCtx      = null;
+let analyser      = null;
+let micStream     = null;
+let animFrame     = null;
+let typingBubble  = null;
 
-// ─────────────────────────────────────────
-// Init
-// ─────────────────────────────────────────
-roleBadge.textContent = ROLE === 'practitioner' ? '醫師' : '患者';
-roleBadge.classList.add(ROLE);
-
-setStatus('⏳', 'waiting', '啟動鏡頭中…', '請允許瀏覽器使用鏡頭和麥克風');
-
-(async function init() {
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    localVideo.srcObject = localStream;
-  } catch (e) {
-    setStatus('❌', 'error', '無法開啟鏡頭', '請喺瀏覽器設定允許鏡頭 / 麥克風存取。');
-    return;
-  }
-
-  const iceResp = await fetch(ICE_URL);
-  const iceConfig = await iceResp.json();
-
-  pc = new RTCPeerConnection(iceConfig);
-
-  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-
-  pc.onicecandidate = ({ candidate }) => {
-    if (candidate && ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'ice-candidate', candidate }));
-    }
-  };
-
-  pc.ontrack = (event) => {
-    if (remoteVideo.srcObject !== event.streams[0]) {
-      remoteVideo.srcObject = event.streams[0];
-      onCallConnected();
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
-      if (callStarted) showEnded();
-      else setStatus('❌', 'error', '連接中斷', '對方已離線或網絡問題，請重新整理頁面。');
-    }
-  };
-
-  connectWs();
-})();
-
-// ─────────────────────────────────────────
-// WebSocket signaling
-// ─────────────────────────────────────────
-function connectWs() {
+// ─────────────────────────────────────────────
+// WebSocket
+// ─────────────────────────────────────────────
+function connect() {
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
-    setStatus('📡', 'waiting', '等待對方加入…', '');
+    setConn('connecting', '連接中…');
   };
 
   ws.onmessage = async ({ data }) => {
@@ -377,123 +311,202 @@ function connectWs() {
     try { msg = JSON.parse(data); } catch { return; }
 
     switch (msg.type) {
-      case 'waiting':
-        setStatus('📡', 'waiting', '等待對方加入…',
-          ROLE === 'patient'
-            ? '請將連結分享俾醫師，或等待醫師加入'
-            : '等待患者加入');
+      case 'ready':
+        setConn('ready', '已連線');
+        setStatus('–');
+        addBubble('system', '✅ 已連接 Chloe，按住麥克風說話');
+        btnPTT.disabled = false;
         break;
 
-      case 'please-offer':
-        // I was here first — now peer joined, I create the offer
-        setStatus('🔗', 'calling', '對方已加入，連接中…', '');
-        await createOffer();
+      case 'status':
+        setStatus(msg.text, true);
+        if (!typingBubble) typingBubble = addTyping();
         break;
 
-      case 'offer':
-        // I'm the answerer
-        setStatus('🔗', 'calling', '連接中…', '');
-        await pc.setRemoteDescription(new RTCSessionDescription(msg));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        wsSend({ type: 'answer', sdp: answer.sdp });
+      case 'transcript':
+        addBubble('user', msg.text);
         break;
 
-      case 'answer':
-        await pc.setRemoteDescription(new RTCSessionDescription(msg));
+      case 'response':
+        removeTyping();
+        setStatus('–');
+        addBubble('chloe', msg.text);
+        if (msg.audio_b64) await playAudio(msg.audio_b64);
+        btnPTT.disabled = false;
         break;
 
-      case 'ice-candidate':
-        if (msg.candidate) {
-          try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }
-          catch (e) { console.warn('ICE add failed', e); }
-        }
-        break;
-
-      case 'peer-left':
-        if (callStarted) showEnded();
-        else setStatus('📡', 'waiting', '對方已離開', '請等待或重新整理。');
+      case 'error':
+        removeTyping();
+        setStatus('–');
+        addBubble('system', '⚠️ ' + msg.text);
+        btnPTT.disabled = false;
         break;
     }
   };
 
-  ws.onerror = () => {
-    setStatus('❌', 'error', '連線錯誤', '請重新整理頁面再試。');
-  };
+  ws.onerror = () => setConn('error', '連線錯誤');
 
   ws.onclose = () => {
-    if (callStarted) return;
-    // Attempt reconnect after 3s if call not yet started
-    setTimeout(connectWs, 3000);
+    setConn('error', '已斷線');
+    btnPTT.disabled = true;
+    setTimeout(connect, 3000);
   };
 }
 
-function wsSend(obj) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(obj));
+// ─────────────────────────────────────────────
+// Mic setup
+// ─────────────────────────────────────────────
+async function setupMic() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+    analyser  = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    audioCtx.createMediaStreamSource(micStream).connect(analyser);
+  } catch (e) {
+    addBubble('system', '⚠️ 無法開啟麥克風，請允許瀏覽器使用麥克風');
   }
 }
 
-async function createOffer() {
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  wsSend({ type: 'offer', sdp: offer.sdp });
+function startMicLevel() {
+  const buf = new Uint8Array(analyser?.frequencyBinCount || 0);
+  micBar.style.visibility = 'visible';
+  function tick() {
+    if (!isRecording) return;
+    analyser?.getByteFrequencyData(buf);
+    const avg = buf.reduce((a, b) => a + b, 0) / (buf.length || 1);
+    micBarFill.style.width = Math.min(100, avg * 1.5) + '%';
+    animFrame = requestAnimationFrame(tick);
+  }
+  tick();
 }
 
-// ─────────────────────────────────────────
-// Call state
-// ─────────────────────────────────────────
-function onCallConnected() {
-  callStarted = true;
-  statusOverlay.classList.add('hidden');
-  callSeconds = 0;
-  durationTimer = setInterval(() => {
-    callSeconds++;
-    const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
-    const s = String(callSeconds % 60).padStart(2, '0');
-    durationEl.textContent = `${m}:${s}`;
-  }, 1000);
+function stopMicLevel() {
+  cancelAnimationFrame(animFrame);
+  micBar.style.visibility = 'hidden';
+  micBarFill.style.width = '0%';
 }
 
-function showEnded() {
-  clearInterval(durationTimer);
-  if (pc) { pc.close(); pc = null; }
-  if (ws) { ws.onclose = null; ws.close(); ws = null; }
-  localStream?.getTracks().forEach(t => t.stop());
-  endedScreen.classList.add('show');
+// ─────────────────────────────────────────────
+// Push-to-talk
+// ─────────────────────────────────────────────
+function startRecording() {
+  if (isRecording || !micStream || btnPTT.disabled) return;
+  isRecording   = true;
+  audioChunks   = [];
+  btnPTT.classList.add('recording');
+  recLabel.textContent = '🔴 錄音中…';
+  recLabel.classList.add('recording');
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : 'audio/webm';
+
+  mediaRecorder = new MediaRecorder(micStream, { mimeType });
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  mediaRecorder.onstop = sendAudio;
+  mediaRecorder.start(100);
+  startMicLevel();
 }
 
-// ─────────────────────────────────────────
-// Controls
-// ─────────────────────────────────────────
-function toggleMic() {
-  micEnabled = !micEnabled;
-  localStream?.getAudioTracks().forEach(t => { t.enabled = micEnabled; });
-  btnMic.textContent  = micEnabled ? '🎙️' : '🔇';
-  btnMic.className    = `ctrl-btn ${micEnabled ? 'active' : 'inactive'}`;
+function stopRecording() {
+  if (!isRecording) return;
+  isRecording = false;
+  btnPTT.classList.remove('recording');
+  recLabel.textContent = '處理中…';
+  recLabel.classList.remove('recording');
+  stopMicLevel();
+  mediaRecorder?.stop();
+  btnPTT.disabled = true;
 }
 
-function toggleCam() {
-  camEnabled = !camEnabled;
-  localStream?.getVideoTracks().forEach(t => { t.enabled = camEnabled; });
-  btnCam.textContent = camEnabled ? '📷' : '🚫';
-  btnCam.className   = `ctrl-btn ${camEnabled ? 'active' : 'inactive'}`;
+async function sendAudio() {
+  if (!audioChunks.length) {
+    btnPTT.disabled = false;
+    recLabel.textContent = '按住說話';
+    return;
+  }
+  const blob   = new Blob(audioChunks, { type: 'audio/webm' });
+  const buffer = await blob.arrayBuffer();
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(buffer);
+  }
+  audioChunks = [];
+  recLabel.textContent = '按住說話';
 }
 
-function hangUp() {
-  showEnded();
+// ─────────────────────────────────────────────
+// Audio playback
+// ─────────────────────────────────────────────
+async function playAudio(b64) {
+  avatarEl.classList.add('speaking');
+  try {
+    const bytes  = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const blob   = new Blob([bytes], { type: 'audio/mpeg' });
+    const url    = URL.createObjectURL(blob);
+    const audio  = new Audio(url);
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      avatarEl.classList.remove('speaking');
+    };
+    await audio.play();
+  } catch (e) {
+    avatarEl.classList.remove('speaking');
+    console.warn('Audio playback failed', e);
+  }
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────
 // UI helpers
-// ─────────────────────────────────────────
-function setStatus(icon, iconClass, text, sub) {
-  statusIcon.textContent  = icon;
-  statusIcon.className    = `status-icon ${iconClass}`;
-  statusText.textContent  = text;
-  statusSub.textContent   = sub;
-  statusOverlay.classList.remove('hidden');
+// ─────────────────────────────────────────────
+function setConn(cls, text) {
+  connStatus.className = 'connecting ' + cls;
+  connStatus.textContent = text;
 }
+
+function setStatus(text, active = false) {
+  statusText.textContent = text;
+  statusText.className   = active ? 'active' : '';
+}
+
+function addBubble(role, text) {
+  const el = document.createElement('div');
+  el.className = `bubble ${role}`;
+  el.textContent = text;
+  transcript.appendChild(el);
+  transcript.scrollTop = transcript.scrollHeight;
+  return el;
+}
+
+function addTyping() {
+  const el = document.createElement('div');
+  el.className = 'bubble typing';
+  el.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  transcript.appendChild(el);
+  transcript.scrollTop = transcript.scrollHeight;
+  return el;
+}
+
+function removeTyping() {
+  if (typingBubble) { typingBubble.remove(); typingBubble = null; }
+}
+
+// ─────────────────────────────────────────────
+// PTT event bindings (mouse + touch)
+// ─────────────────────────────────────────────
+btnPTT.addEventListener('mousedown',  e => { e.preventDefault(); startRecording(); });
+btnPTT.addEventListener('mouseup',    e => { e.preventDefault(); stopRecording(); });
+btnPTT.addEventListener('mouseleave', e => { if (isRecording) stopRecording(); });
+btnPTT.addEventListener('touchstart', e => { e.preventDefault(); startRecording(); }, { passive: false });
+btnPTT.addEventListener('touchend',   e => { e.preventDefault(); stopRecording(); },  { passive: false });
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+(async function init() {
+  await setupMic();
+  connect();
+})();
 </script>
 </body>
 </html>

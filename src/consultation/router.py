@@ -18,6 +18,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from src.consultation.signaling import get_hub
+from src.consultation.voice_ws import handle_voice
 
 logger = logging.getLogger("consultation.router")
 
@@ -107,6 +108,16 @@ async def consult_page(room_id: str, request: Request) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 # WebSocket signaling
 # ---------------------------------------------------------------------------
+
+
+@router.websocket("/ws/voice/{room_id}")
+async def voice_ws(websocket: WebSocket, room_id: str) -> None:
+    """Voice AI WebSocket — patient speaks, Chloe responds with audio."""
+    chloe = websocket.app.state.chloe_agent
+    if chloe is None:
+        await websocket.close(code=4000)
+        return
+    await handle_voice(websocket, room_id, chloe)
 
 
 @router.websocket("/ws/consultation/{room_id}/{role}")
