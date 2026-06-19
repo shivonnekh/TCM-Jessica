@@ -26,7 +26,7 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: top center;
+    object-position: center 18%;
     display: block;
     transition: filter 0.4s;
   }
@@ -92,17 +92,24 @@
   /* ── Subtitle ── */
   #subtitle {
     position: fixed;
-    bottom: 120px; left: 20px; right: 20px;
+    bottom: 120px; left: 32px; right: 32px;
     text-align: center;
-    font-size: 15px; line-height: 1.6;
+    font-size: 18px; font-weight: 500; line-height: 1.55;
     color: white;
-    text-shadow: 0 1px 8px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8);
+    text-shadow: 0 1px 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9);
     opacity: 0;
-    transition: opacity 0.4s;
+    transition: opacity 0.25s;
     z-index: 20;
-    max-height: 90px; overflow: hidden;
+    pointer-events: none;
   }
   #subtitle.show { opacity: 1; }
+  /* User's own speech transcript — dimmer, smaller */
+  #subtitle.user-speech {
+    color: rgba(255,255,255,0.6);
+    font-size: 14px;
+    font-style: italic;
+    font-weight: 400;
+  }
 
   /* ── Listening indicator (wave) ── */
   #listenWave {
@@ -174,10 +181,37 @@
 </head>
 <body>
 
+<!-- Welcome splash — shown before call starts -->
+<div id="welcomeSplash" style="
+  position:fixed;inset:0;z-index:999;
+  background:linear-gradient(160deg,#0b1a13 0%,#0f2a1a 60%,#071209 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:24px;padding:40px;text-align:center;
+">
+  <div style="font-size:56px;margin-bottom:4px">🌿</div>
+  <div style="font-size:22px;font-weight:700;color:#e8f5ee;letter-spacing:.5px">
+    恭喜你已接通
+  </div>
+  <div style="font-size:28px;font-weight:700;color:#3ecf8e;letter-spacing:1px">
+    陳芷晴中醫師
+  </div>
+  <div style="font-size:14px;color:rgba(255,255,255,0.5);max-width:280px;line-height:1.7">
+    AI 視頻診症助理<br>請點擊下方按鈕接通，<br>並允許使用麥克風及鏡頭
+  </div>
+  <button onclick="startCall()" style="
+    margin-top:8px;padding:16px 48px;
+    background:linear-gradient(135deg,#3ecf8e,#2ba86e);
+    border:none;border-radius:999px;
+    color:#fff;font-size:18px;font-weight:700;
+    cursor:pointer;letter-spacing:.5px;
+    box-shadow:0 4px 24px rgba(62,207,142,0.4);
+  ">接通診症</button>
+</div>
+
 <!-- Chloe "video" -->
 <div id="chloeVideo">
   <img id="chloeImg" src="/static/chloe.jpg" alt="Chloe">
-  <div id="chloeName">Chloe 陳<span>心宜中醫 AI 助理</span></div>
+  <div id="chloeName">陳芷晴中醫師<span>AI 視頻診症助理</span></div>
 </div>
 
 <!-- Status -->
@@ -185,6 +219,17 @@
 
 <!-- Subtitle -->
 <div id="subtitle"></div>
+
+<!-- Debug panel (tap to toggle) -->
+<div id="debugPanel" onclick="this.classList.toggle('open')" style="
+  position:fixed;top:60px;right:8px;z-index:999;
+  background:rgba(0,0,0,0.82);color:#0f0;font:11px/1.5 monospace;
+  border-radius:8px;padding:6px 10px;max-width:280px;cursor:pointer;
+  max-height:36px;overflow:hidden;transition:max-height .3s;
+">⚙ debug</div>
+<style>
+  #debugPanel.open { max-height:320px; overflow-y:auto; }
+</style>
 
 <!-- Listening wave -->
 <div id="listenWave">
@@ -196,6 +241,9 @@
   <video id="selfVideo" autoplay playsinline muted></video>
   <div id="selfLabel">你</div>
 </div>
+
+<!-- Hidden canvas for vision frame capture — 320×240 JPEG -->
+<canvas id="captureCanvas" width="320" height="240" style="display:none"></canvas>
 
 <!-- Controls -->
 <div id="controls">
@@ -215,6 +263,20 @@
 
 <script>
 // ─────────────────────────────────────────────
+// On-screen debug log
+// ─────────────────────────────────────────────
+const _dbg = document.getElementById('debugPanel');
+function dbg(...args) {
+  const line = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  console.log('[DBG]', line);
+  const el = document.createElement('div');
+  el.textContent = new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ' + line;
+  _dbg.appendChild(el);
+  // Keep last 30 lines
+  while (_dbg.children.length > 31) _dbg.removeChild(_dbg.children[1]);
+}
+
+// ─────────────────────────────────────────────
 // Config
 // ─────────────────────────────────────────────
 const pathParts = window.location.pathname.split('/').filter(Boolean);
@@ -227,7 +289,8 @@ const VAD_THRESHOLD   = 14;   // fallback floor (overridden by calibration)
 const SPEECH_START_MS = 280;  // must detect voice for this long before recording
 const SILENCE_END_MS  = 850;  // silence duration to end recording
 const MIN_AUDIO_MS    = 400;  // discard very short clips
-const MAX_AUDIO_MS    = 18000;// auto-end after 18s
+const MAX_AUDIO_MS    = 8000; // auto-end after 8s (safety)
+const SILENCE_RATIO   = 0.55; // hysteresis: stop-recording threshold = speech threshold × this
 let   dynamicThreshold = VAD_THRESHOLD; // updated by calibrateNoise()
 
 // ─────────────────────────────────────────────
@@ -254,13 +317,18 @@ let audioChunks    = [];
 let micEnabled     = true;
 let camEnabled     = true;
 let chloeIsTalking = false;
+let currentSource  = null;   // currently playing AudioBufferSourceNode
 let subtitleTimer  = null;
+
+// Barge-in: patient speaks for this long while Chloe is talking → interrupt
+const BARGE_IN_MS  = 600;
+let bargeInStart   = null;
 
 // VAD state
 let vadActive      = false;
 let isRecording    = false;
-let speechStart    = null;   // when we first detected speech
-let silenceStart   = null;   // when speech ended
+let speechStart    = null;   // when we first detected potential speech (pre-recording)
+let lastSpeechAt   = 0;      // timestamp of last frame above dynamicThreshold
 let recordStart    = null;   // when MediaRecorder started
 
 // ─────────────────────────────────────────────
@@ -517,24 +585,38 @@ function drawChloe() {
 // ─────────────────────────────────────────────
 function connect() {
   ws = new WebSocket(WS_URL);
-  ws.onopen  = () => setStatus('s-conn', '連接中…');
+  ws.onopen  = () => { setStatus('s-conn', '連接中…'); dbg('WS open'); };
   ws.onmessage = async ({ data }) => {
     let msg; try { msg = JSON.parse(data); } catch { return; }
+    dbg('WS←' + msg.type + (msg.text ? ' "' + msg.text.slice(0,30) + '"' : ''));
     switch (msg.type) {
       case 'ready':
-        setStatus('s-idle', '已連線 · 正在聆聽');
-        startVAD();
+        // Calibrate noise — VAD will start after welcome audio finishes
+        // (playAudio → onended → resumeVAD). If no welcome audio, start now.
+        dbg('WS ready — calibrating');
+        await calibrateNoise();
+        if (!chloeIsTalking) {
+          startVAD();
+          startLiveRecog();
+          setStatus('s-idle', '已連線 · 正在聆聽');
+        }
+        // else: welcome audio is playing; onended will call resumeVAD()
         break;
       case 'status':
         if (msg.text.includes('聽')) { setStatus('s-listening', '聆聽中…'); setChloeState(''); }
         else if (msg.text.includes('諗')) { setStatus('s-thinking', 'Chloe 諗緊…'); setChloeState('thinking'); }
         else if (msg.text.includes('回')) { setStatus('s-speaking', 'Chloe 回緊…'); setChloeState('speaking'); }
         break;
+      case 'transcript':
+        // Show what the user said (Whisper transcription)
+        showUserTranscript(msg.text);
+        break;
       case 'response':
-        showSubtitle(msg.text);
         if (msg.audio_b64) {
-          await playAudio(msg.audio_b64);
+          // Decode first → get exact duration → sync subtitles to audio
+          await playAudioWithSubtitles(msg.text, msg.audio_b64);
         } else {
+          showSubtitle(msg.text);
           chloeIsTalking = false;
           setChloeState('');
           resumeVAD();
@@ -548,7 +630,7 @@ function connect() {
         break;
     }
   };
-  ws.onerror  = () => setStatus('s-error', '連線錯誤');
+  ws.onerror  = (e) => { setStatus('s-error', '連線錯誤'); dbg('WS error', e.type); };
   ws.onclose  = () => {
     setStatus('s-conn', '重新連接…');
     stopVAD();
@@ -604,8 +686,40 @@ async function calibrateNoise() {
 
   const sorted = [...samples].sort((a, b) => a - b);
   const p75 = sorted[Math.floor(sorted.length * 0.75)];
-  dynamicThreshold = Math.max(VAD_THRESHOLD, p75 * 2.5);
-  console.log('[VAD] noise p75=', p75.toFixed(1), '→ threshold=', dynamicThreshold.toFixed(1));
+  // Use p75 * 1.3, capped at 80 — enough margin above ambient without being unreachable
+  dynamicThreshold = Math.min(Math.max(VAD_THRESHOLD, p75 * 1.3), 80);
+  dbg('VAD p75=' + p75.toFixed(1) + ' → threshold=' + dynamicThreshold.toFixed(1));
+}
+
+// ─────────────────────────────────────────────
+// Vision frame capture — for TCM 望診
+// ─────────────────────────────────────────────
+
+/**
+ * Capture a JPEG frame from the patient's camera and return the raw base64
+ * string (no data-URI prefix).  Returns null if the camera isn't available.
+ *
+ * drawImage() reads from the underlying MediaStream, so it captures the
+ * unmirrored (natural) frame regardless of the CSS scaleX(-1) on #selfVideo.
+ * That's what we want — natural face orientation for TCM analysis.
+ */
+function captureFrame() {
+  if (!videoStream) return null;
+  const track = videoStream.getVideoTracks()[0];
+  if (!track || track.readyState !== 'live' || !track.enabled) return null;
+  const canvas = document.getElementById('captureCanvas');
+  if (!canvas) return null;
+  try {
+    const ctx2d = canvas.getContext('2d');
+    ctx2d.drawImage(selfVideo, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+    // Strip "data:image/jpeg;base64,"
+    const b64 = dataUrl.split(',')[1];
+    return b64 || null;
+  } catch (err) {
+    dbg('captureFrame err: ' + err);
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -624,9 +738,21 @@ function getAmplitude() {
   return sum / 78;
 }
 
+let _ampDebugInterval = null;
+
 function startVAD() {
+  if (vadActive) return; // already running — don't double-start
   vadActive = true;
   vadInterval = setInterval(vadTick, 50);
+  // Live amp debug — only one instance
+  if (!_ampDebugInterval) {
+    _ampDebugInterval = setInterval(() => {
+      if (!vadActive) return;
+      const a = getAmplitude();
+      const mark = a > dynamicThreshold ? '🔴SPEECH' : '🟢quiet';
+      dbg('amp=' + a.toFixed(1) + ' thr=' + dynamicThreshold.toFixed(1) + ' ' + mark);
+    }, 2000);
+  }
 }
 
 function stopVAD() {
@@ -640,39 +766,80 @@ function resumeVAD() {
   listenWave.classList.remove('show');
 }
 
+function interruptChloe() {
+  if (!chloeIsTalking) return;
+  dbg('BARGE-IN: stopping Chloe');
+  try { currentSource?.stop(); } catch {}
+  currentSource  = null;
+  chloeIsTalking = false;
+  bargeInStart   = null;
+  setChloeState('');
+  // Clear queued subtitles
+  clearTimeout(chunkTimer);
+  chunkQueue = [];
+  subtitleEl.classList.remove('show');
+  setStatus('s-idle', '已連線 · 正在聆聽');
+  startLiveRecog();
+  // Don't resumeVAD() — vadTick is still running, will handle speech naturally
+}
+
 function vadTick() {
-  if (!vadActive || chloeIsTalking || !micEnabled) return;
+  if (!vadActive || !micEnabled) return;
 
   const amp = getAmplitude();
-  const now  = Date.now();
+  const now = Date.now();
+
+  // ── Barge-in detection (runs even while Chloe is talking) ──
+  if (chloeIsTalking) {
+    if (amp > dynamicThreshold) {
+      if (bargeInStart === null) bargeInStart = now;
+      else if (now - bargeInStart > BARGE_IN_MS) interruptChloe();
+    } else {
+      bargeInStart = null;
+    }
+    return; // don't start a new recording while Chloe is still speaking
+  }
+
+  bargeInStart = null; // reset when Chloe isn't talking
 
   if (amp > dynamicThreshold) {
-    // ── Voice detected ──
-    silenceStart = null;
+    // ── Speech frame ──
+    lastSpeechAt = now;
 
     if (!isRecording) {
-      if (speechStart === null) {
-        speechStart = now;
-      } else if (now - speechStart > SPEECH_START_MS) {
-        startRecording();
-      }
+      if (speechStart === null) speechStart = now;
+      else if (now - speechStart > SPEECH_START_MS) startRecording();
     } else {
-      // auto-stop after max
+      // Hard cap — safety net
       if (now - recordStart > MAX_AUDIO_MS) stopRecording();
     }
   } else {
-    // ── Silence ──
+    // ── Sub-threshold ──
     speechStart = null;
 
-    if (isRecording) {
-      if (silenceStart === null) {
-        silenceStart = now;
-      } else if (now - silenceStart > SILENCE_END_MS) {
-        stopRecording();
-      }
+    if (isRecording && lastSpeechAt > 0 && now - lastSpeechAt > SILENCE_END_MS) {
+      stopRecording();
     }
   }
 }
+
+// Pick the best MIME type this browser supports (Safari → mp4, Chrome → webm)
+function getSupportedMimeType() {
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+  ];
+  for (const t of candidates) {
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return ''; // let browser decide
+}
+
+let recordingMime = ''; // set in startRecording, read in onRecordingStop
 
 function startRecording() {
   if (isRecording || !micStream) return;
@@ -682,26 +849,36 @@ function startRecording() {
   listenWave.classList.add('show');
   setStatus('s-listening', '聆聽中…');
 
-  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-    ? 'audio/webm;codecs=opus' : 'audio/webm';
-  mediaRecorder = new MediaRecorder(micStream, { mimeType: mime });
-  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-  mediaRecorder.onstop = onRecordingStop;
-  mediaRecorder.start(100);
+  try {
+    recordingMime = getSupportedMimeType();
+    const opts = recordingMime ? { mimeType: recordingMime } : {};
+    dbg('REC start mime=' + (recordingMime || 'default'));
+    mediaRecorder = new MediaRecorder(micStream, opts);
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = onRecordingStop;
+    mediaRecorder.start(100);
+  } catch (err) {
+    dbg('REC ERROR: ' + err);
+    isRecording = false;
+    lastSpeechAt = 0;
+    listenWave.classList.remove('show');
+    setStatus('s-idle', '已連線 · 正在聆聽');
+  }
 }
 
 function stopRecording() {
   if (!isRecording) return;
-  isRecording   = false;
-  speechStart   = null;
-  silenceStart  = null;
+  isRecording  = false;
+  speechStart  = null;
+  lastSpeechAt = 0;
   listenWave.classList.remove('show');
   mediaRecorder?.stop();
 }
 
 function abortRecording() {
-  isRecording = false;
-  speechStart = silenceStart = null;
+  isRecording  = false;
+  speechStart  = null;
+  lastSpeechAt = 0;
   listenWave.classList.remove('show');
   try { mediaRecorder?.stop(); } catch {}
   audioChunks = [];
@@ -709,9 +886,9 @@ function abortRecording() {
 
 async function onRecordingStop() {
   const duration = Date.now() - recordStart;
-  console.log('[VAD] recording stopped. duration=', duration, 'chunks=', audioChunks.length);
+  dbg('REC stopped dur=' + duration + 'ms chunks=' + audioChunks.length);
   if (audioChunks.length === 0 || duration < MIN_AUDIO_MS) {
-    console.log('[VAD] too short, discarding');
+    dbg('REC discard (too short)');
     setStatus('s-idle', '已連線 · 正在聆聽');
     return;
   }
@@ -719,8 +896,24 @@ async function onRecordingStop() {
   stopVAD();
   setStatus('s-thinking', '傳送中…');
 
-  const blob   = new Blob(audioChunks, { type: 'audio/webm' });
+  // ── 1. Capture vision frame and send before audio ──────────────
+  // Server starts GPT-4o Vision analysis concurrently with STT,
+  // so the latency cost is hidden behind Whisper transcription (~1-2s).
+  if (ws?.readyState === WebSocket.OPEN) {
+    const frameB64 = captureFrame();
+    if (frameB64) {
+      ws.send(JSON.stringify({ type: 'vision_frame', image_b64: frameB64 }));
+      dbg('vision_frame sent b64_len=' + frameB64.length);
+    } else {
+      dbg('vision_frame skipped (no camera)');
+    }
+  }
+
+  // ── 2. Send audio ──────────────────────────────────────────────
+  const blobType = recordingMime || 'audio/webm';
+  const blob   = new Blob(audioChunks, { type: blobType });
   const buffer = await blob.arrayBuffer();
+  dbg('REC send ' + buffer.byteLength + 'b mime=' + blobType);
   if (ws?.readyState === WebSocket.OPEN) ws.send(buffer);
   audioChunks = [];
 }
@@ -728,8 +921,9 @@ async function onRecordingStop() {
 // ─────────────────────────────────────────────
 // Audio playback — AudioContext for reliability
 // ─────────────────────────────────────────────
-async function playAudio(b64) {
+async function playAudioWithSubtitles(text, b64) {
   chloeIsTalking = true;
+  setChloeState('speaking');
   setStatus('s-speaking', 'Chloe 正在說話…');
   try {
     if (!audioCtx || audioCtx.state === 'closed') {
@@ -737,37 +931,169 @@ async function playAudio(b64) {
     }
     if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-    const bytes  = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const bytes   = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     const decoded = await audioCtx.decodeAudioData(bytes.buffer);
-    const source  = audioCtx.createBufferSource();
+
+    // Sync subtitles to actual audio duration
+    showSubtitle(text, decoded.duration * 1000);
+
+    const source = audioCtx.createBufferSource();
+    currentSource = source;
     source.buffer = decoded;
     source.connect(audioCtx.destination);
     source.start(0);
+    stopLiveRecog();
+
     source.onended = () => {
+      if (currentSource === source) currentSource = null;
       chloeIsTalking = false;
+      bargeInStart   = null;
       setChloeState('');
       setTimeout(() => {
         setStatus('s-idle', '已連線 · 正在聆聽');
         resumeVAD();
+        startLiveRecog();
       }, 400);
     };
   } catch (e) {
-    console.warn('Audio decode/play failed:', e);
+    dbg('Audio play error: ' + e);
+    currentSource  = null;
     chloeIsTalking = false;
+    bargeInStart   = null;
     setChloeState('');
     setStatus('s-idle', '已連線 · 正在聆聽');
     resumeVAD();
+    startLiveRecog();
   }
 }
 
 // ─────────────────────────────────────────────
-// Subtitle
+// Subtitle — movie-style chunked display
 // ─────────────────────────────────────────────
-function showSubtitle(text) {
-  subtitleEl.textContent = text;
+const MAX_SUB_CHARS = 18; // max Chinese chars per subtitle line
+
+function splitSubtitle(text) {
+  const chunks = [];
+  // Split on newlines first (Chloe sends multi-bubble responses)
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    // Split on sentence-ending punctuation, keeping it attached
+    const sentences = line.split(/(?<=[。！？…⋯])\s*/).filter(Boolean);
+
+    for (const sentence of sentences) {
+      if (sentence.length <= MAX_SUB_CHARS) {
+        chunks.push(sentence.trim());
+      } else {
+        // Split long sentences on mid-sentence punctuation
+        const parts = sentence.split(/(?<=[，；、：])\s*/).filter(Boolean);
+        let current = '';
+        for (const part of parts) {
+          if (!current) {
+            current = part;
+          } else if ((current + part).length <= MAX_SUB_CHARS) {
+            current += part;
+          } else {
+            if (current.trim()) chunks.push(current.trim());
+            current = part;
+          }
+        }
+        if (current.trim()) chunks.push(current.trim());
+      }
+    }
+  }
+  return chunks.filter(c => c.trim().length > 0);
+}
+
+let chunkTimer = null;
+let chunkQueue = [];
+let chunkHolds = []; // per-chunk hold durations in ms
+
+function showSubtitle(text, totalAudioMs = null) {
+  clearTimeout(chunkTimer);
+  chunkQueue = splitSubtitle(text);
+  if (!chunkQueue.length) return;
+
+  if (totalAudioMs && totalAudioMs > 0) {
+    // Distribute audio duration proportionally across chunks by char count
+    const totalChars = chunkQueue.reduce((s, c) => s + c.length, 0) || 1;
+    // Reserve 600ms at the end so last chunk doesn't vanish mid-word
+    const budget = Math.max(0, totalAudioMs - 600);
+    chunkHolds = chunkQueue.map(c => Math.max(700, (c.length / totalChars) * budget));
+  } else {
+    // Fallback: fixed 160ms per char
+    chunkHolds = chunkQueue.map(c => Math.min(3000, Math.max(1200, c.length * 160)));
+  }
+
+  _showNextChunk(0);
+}
+
+function _showNextChunk(i) {
+  if (i >= chunkQueue.length) {
+    chunkTimer = setTimeout(() => subtitleEl.classList.remove('show'), 1200);
+    return;
+  }
+  subtitleEl.textContent = chunkQueue[i];
+  subtitleEl.classList.remove('user-speech');
   subtitleEl.classList.add('show');
-  clearTimeout(subtitleTimer);
-  subtitleTimer = setTimeout(() => subtitleEl.classList.remove('show'), 7000);
+  chunkTimer = setTimeout(() => _showNextChunk(i + 1), chunkHolds[i]);
+}
+
+function showUserTranscript(text) {
+  clearTimeout(chunkTimer);
+  chunkQueue = [];
+  subtitleEl.textContent = '你：' + text;
+  subtitleEl.classList.add('show', 'user-speech');
+  subtitleTimer = setTimeout(() => subtitleEl.classList.remove('show'), 5000);
+}
+
+// ─────────────────────────────────────────────
+// Live Speech Recognition (Web Speech API)
+// Shows words as user speaks — zh-HK Cantonese
+// ─────────────────────────────────────────────
+let liveRecog = null;
+
+function startLiveRecog() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return; // not supported — graceful degradation
+
+  liveRecog = new SR();
+  liveRecog.lang = 'zh-HK';
+  liveRecog.continuous = true;
+  liveRecog.interimResults = true;
+  liveRecog.maxAlternatives = 1;
+
+  liveRecog.onresult = (e) => {
+    if (!isRecording) return; // only show while mic is recording
+    let text = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      text += e.results[i][0].transcript;
+    }
+    if (text.trim()) {
+      subtitleEl.textContent = '你：' + text.trim();
+      subtitleEl.classList.add('show', 'user-speech');
+      clearTimeout(subtitleTimer);
+    }
+  };
+
+  liveRecog.onend = () => {
+    // Auto-restart if VAD is still active
+    if (vadActive && !chloeIsTalking) {
+      try { liveRecog.start(); } catch {}
+    }
+  };
+
+  liveRecog.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') return;
+    // Restart on other errors
+    if (vadActive) setTimeout(() => { try { liveRecog.start(); } catch {} }, 500);
+  };
+
+  try { liveRecog.start(); } catch {}
+}
+
+function stopLiveRecog() {
+  try { liveRecog?.stop(); } catch {}
 }
 
 // ─────────────────────────────────────────────
@@ -796,9 +1122,16 @@ function toggleCam() {
 
 function endCall() {
   stopVAD();
+  stopLiveRecog();
+  // Kill any playing audio immediately
+  try { currentSource?.stop(); } catch {}
+  currentSource = null;
+  chloeIsTalking = false;
+  clearTimeout(chunkTimer);
   if (ws) { ws.onclose = null; ws.close(); }
   micStream?.getTracks().forEach(t => t.stop());
   videoStream?.getTracks().forEach(t => t.stop());
+  try { audioCtx?.close(); } catch {}
   document.body.innerHTML = `
     <div style="height:100vh;display:flex;flex-direction:column;align-items:center;
                 justify-content:center;gap:16px;background:#0b0f0c;color:#e8edf2;
@@ -815,9 +1148,14 @@ function endCall() {
 }
 
 // ─────────────────────────────────────────────
-// Init
+// Init — gated behind the welcome splash
 // ─────────────────────────────────────────────
-(async () => { await setupMedia(); connect(); })();
+async function startCall() {
+  document.getElementById('welcomeSplash').style.display = 'none';
+  await setupMedia();
+  connect();
+}
+// Do NOT auto-start — wait for user to tap "接通診症"
 </script>
 </body>
 </html>

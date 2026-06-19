@@ -188,6 +188,7 @@ class ChloeAgent:
         user_message: str,
         *,
         turns: int = 0,
+        vision_notes: str = "",
     ) -> list[str]:
         messages: list[dict] = []
         for m in history[-_HISTORY_WINDOW:]:
@@ -201,6 +202,18 @@ class ChloeAgent:
         system = persona.system_prompt
         if persona.cta_nudge and turns >= persona.cta_after_turns:
             system = system + persona.cta_nudge
+
+        # Inject TCM 望診 observations from vision frame analysis (voice calls only).
+        # This gives Chloe concrete facial/eye/tongue observations so she can ask
+        # more targeted questions (e.g. "我睇到你面色偏白，係咪平時比較怕冷？").
+        if vision_notes:
+            system = (
+                system
+                + "\n\n【即時望診記錄（AI望診助理提供）】\n"
+                + vision_notes
+                + "\n\n請在問診時適時參考以上望診觀察，問出更有針對性的中醫問題。"
+                "（例如面色偏白 → 詢問是否怕冷；黑眼圈明顯 → 詢問睡眠質素）"
+            )
 
         resp = await self._client.messages.create(
             model=persona.model,

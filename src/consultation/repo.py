@@ -53,6 +53,20 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _parse_dt(value: str | datetime | None) -> datetime | None:
+    """Coerce SQLite ISO strings to aware datetime; pass through native datetimes."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    # SQLite stores as string — parse and attach UTC
+    try:
+        dt = datetime.fromisoformat(str(value))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
 def _row_to_consultation(row: dict | object) -> Consultation:
     """Accept both asyncpg Record (attr access) and sqlite3 Row (dict-like)."""
     def _get(key: str):
@@ -66,9 +80,9 @@ def _row_to_consultation(row: dict | object) -> Consultation:
         crm_key=_get("crm_key"),
         preferred_time=_get("preferred_time") or "",
         status=_get("status"),
-        created_at=_get("created_at") or _now(),
-        patient_joined_at=_get("patient_joined_at"),
-        practitioner_joined_at=_get("practitioner_joined_at"),
+        created_at=_parse_dt(_get("created_at")) or _now(),
+        patient_joined_at=_parse_dt(_get("patient_joined_at")),
+        practitioner_joined_at=_parse_dt(_get("practitioner_joined_at")),
     )
 
 

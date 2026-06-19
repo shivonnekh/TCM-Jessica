@@ -189,7 +189,12 @@ async def _call_minimax(text: str, voice_id: str) -> bytes | None:
     payload = {
         "model": _DEFAULT_MODEL,
         "text": text,
-        "voice_setting": {"voice_id": voice_id},
+        "voice_setting": {
+            "voice_id": voice_id,
+            "pitch": 1,      # +1 semitone — Chloe IP voice spec
+            "speed": 1.0,
+            "vol": 1.0,
+        },
         "language_boost": language,
         "audio_setting": {
             "format": "mp3",

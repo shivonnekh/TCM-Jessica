@@ -134,11 +134,17 @@ async def lifespan(app: FastAPI):
     set_chloe_agent(chloe_agent)
     app.state.chloe_agent = chloe_agent
 
+
     # Start background tasks — token refresh + (optional) polling fallback.
     # Both are best-effort: if ChatDaddy credentials aren't configured we
     # log a warning and continue (dev / smoke-test mode still works via
     # the inline pipeline path).
     background_tasks: list[asyncio.Task] = []
+
+    # Pre-generate welcome audio so first patient gets instant greeting.
+    from src.consultation import voice_ws as _vws
+    background_tasks.append(asyncio.create_task(_vws.warmup_welcome_audio()))
+
     if os.environ.get("CHATDADDY_REFRESH_TOKEN"):
         background_tasks.append(
             asyncio.create_task(wa_client.start_token_refresh_loop())
