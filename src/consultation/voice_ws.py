@@ -212,6 +212,7 @@ async def handle_voice(
                     turns=len([m for m in history if m.role == "user"]),
                     vision_notes=vision_notes,
                     camera_available=camera_available,
+                    voice_call=True,
                 )
                 logger.info("[voice] LLM ok room=%s bubbles=%d", room_id, len(bubbles))
             except Exception:  # noqa: BLE001

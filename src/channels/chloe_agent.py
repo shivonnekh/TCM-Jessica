@@ -181,6 +181,25 @@ class ChloeAgent:
             "醫師確認時間後會喺同一連結加入，記得開鏡頭同麥克風 📷 如有問題可以 WhatsApp 我哋 🙏",
         ]
 
+    # Voice-call preamble — injected BEFORE the persona system prompt when
+    # _generate() is called from a video consultation (voice_call=True).
+    # It overrides the DM-specific rules (no-photo, IG cadence, etc.) and
+    # establishes that Chloe is in a live video call and can see the patient.
+    _VOICE_CALL_PREAMBLE = """\
+【重要情境】你現在係喺【視頻問診】，唔係 Instagram 私訊。
+
+你同病人係面對面 video call。以下規則取代 IG DM 規則：
+
+1. 你可以透過病人嘅鏡頭直接睇到佢——唔好叫佢拍照片或者發圖片。
+   如需望診，直接請佢對住鏡頭：「可以請你伸一下舌頭嗎？」「請面向鏡頭，我睇一睇你嘅面色。」
+2. 回答要係自然口語、適合聆聽，唔好用 bullet points、markdown 或者太多 emoji。
+   每次回答 1-3 句自然說話，短而溫暖，似真人面對面傾偈咁。
+3. 唔好提 WhatsApp——你哋已經係面對面，唔需要轉去其他平台。
+4. 你係喺做正式問診，可以問有關症狀、病史、生活習慣嘅問題，比 IG 更深入。
+5. 如果病人問嘅問題需要你睇佢，直接透過鏡頭睇，唔好推搪。
+
+"""
+
     async def _generate(
         self,
         persona: ChloePersona,
@@ -190,6 +209,7 @@ class ChloeAgent:
         turns: int = 0,
         vision_notes: str = "",
         camera_available: bool = True,
+        voice_call: bool = False,
     ) -> list[str]:
         messages: list[dict] = []
         for m in history[-_HISTORY_WINDOW:]:
@@ -197,11 +217,16 @@ class ChloeAgent:
             messages.append({"role": role, "content": getattr(m, "content", "")})
         messages.append({"role": "user", "content": user_message})
 
+        # In voice calls, prepend the video-consultation preamble so Chloe
+        # knows she's NOT in a DM — she can see the patient and should behave
+        # like a real face-to-face consultation, not a messaging exchange.
+        system = (self._VOICE_CALL_PREAMBLE + persona.system_prompt) if voice_call else persona.system_prompt
+
         # WhatsApp CTA is relationship-gated: the nudge instruction is only
         # appended once the conversation is ~cta_after_turns deep. Before
         # that, the base prompt tells Chloe NOT to push WhatsApp unsolicited.
-        system = persona.system_prompt
-        if persona.cta_nudge and turns >= persona.cta_after_turns:
+        # (CTA nudge is suppressed entirely in voice calls — no need to push WA.)
+        if not voice_call and persona.cta_nudge and turns >= persona.cta_after_turns:
             system = system + persona.cta_nudge
 
         # Inject TCM 望診 context from vision frame analysis (voice calls only).
