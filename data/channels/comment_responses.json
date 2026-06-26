@@ -10,24 +10,36 @@
       "https://tcm-jessica.onrender.com/media/guides/gut-page-6.png"
     ],
     "public_ack": "I've sent you the TCM gut guide — check your DM! 🌿",
-    "use_agent": false
+    "use_agent": false,
+    "accounts": [
+      "17841417304649448"
+    ]
   },
   "濕熱": {
     "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nIn TCM, damp-heat can show up as heaviness, oily skin, bad breath, sticky stools, or a bitter taste. A simple first step: avoid fried/spicy food for a few days and drink warm water instead of iced drinks.\n\nTell me what symptoms you're noticing, and I'll point you in the right direction.",
     "public_ack": "I've sent you a quick TCM note — check your DM! 🌿",
-    "use_agent": false
+    "use_agent": false,
+    "accounts": [
+      "17841424706900394"
+    ]
   },
   "knee": {
     "dm_text": "Hey! Saw your comment — I've put together my TCM Knee Pain guide just for you 🌿\n\nThe images below break down why your knees are struggling and exactly what to do about it from a TCM perspective. Save them!\n\nIf you want me to take a closer look at your specific situation, just reply here and let's chat 👇",
     "public_ack": "I've sent you the knee pain guide — check your DM! 🌿",
     "image_urls": [],
-    "use_agent": false
+    "use_agent": false,
+    "accounts": [
+      "17841417304649448"
+    ]
   },
   "knee pain": {
     "dm_text": "Hey! Saw your comment — I've put together my TCM Knee Pain guide just for you 🌿\n\nThe images below break down why your knees are struggling and exactly what to do about it from a TCM perspective. Save them!\n\nIf you want me to take a closer look at your specific situation, just reply here and let's chat 👇",
     "public_ack": "I've sent you the knee pain guide — check your DM! 🌿",
     "image_urls": [],
-    "use_agent": false
+    "use_agent": false,
+    "accounts": [
+      "17841417304649448"
+    ]
   },
   "detox": {
     "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM detox tip: detox is not about flushing your body — it's about helping Qi move and reducing damp buildup. For the next 3 days, keep dinners lighter, avoid fried/greasy food, and drink warm water instead of iced drinks.\n\nIf you want the detailed detox guide images to save and refer to, reply GUIDE and I'll send them here 👇",
@@ -38,7 +50,10 @@
       "https://tcm-jessica.onrender.com/media/guides/detox-page-3.png",
       "https://tcm-jessica.onrender.com/media/guides/detox-page-4.png"
     ],
-    "use_agent": false
+    "use_agent": false,
+    "accounts": [
+      "17841417304649448"
+    ]
   },
   "cleanse": {
     "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM detox tip: detox is not about flushing your body — it's about helping Qi move and reducing damp buildup. For the next 3 days, keep dinners lighter, avoid fried/greasy food, and drink warm water instead of iced drinks.\n\nIf you want the detailed detox guide images to save and refer to, reply GUIDE and I'll send them here 👇",
@@ -49,18 +64,27 @@
       "https://tcm-jessica.onrender.com/media/guides/detox-page-3.png",
       "https://tcm-jessica.onrender.com/media/guides/detox-page-4.png"
     ],
-    "use_agent": false
+    "use_agent": false,
+    "accounts": [
+      "17841417304649448"
+    ]
   },
   "tonsil": {
     "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're a signal of too much heat in the stomach and lungs. The good news: it's very manageable.\n\nI've put together a guide with what to do. Images are below — save them!\n\nWant to tell me more about what you're experiencing? Reply here and I'll help you figure out the right direction 👇",
     "public_ack": "I've sent you the tonsil stone guide — check your DM! 🌿",
     "image_urls": [],
-    "use_agent": false
+    "use_agent": false,
+    "accounts": [
+      "17841417304649448"
+    ]
   },
   "tonsil stone": {
     "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're a signal of too much heat in the stomach and lungs. The good news: it's very manageable.\n\nI've put together a guide with what to do. Images are below — save them!\n\nWant to tell me more about what you're experiencing? Reply here and I'll help you figure out the right direction 👇",
     "public_ack": "I've sent you the tonsil stone guide — check your DM! 🌿",
     "image_urls": [],
-    "use_agent": false
+    "use_agent": false,
+    "accounts": [
+      "17841417304649448"
+    ]
   }
 }

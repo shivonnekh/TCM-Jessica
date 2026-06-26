@@ -62,6 +62,7 @@ class CommentReply:
     image_urls: tuple[str, ...] = ()  # multiple images (e.g. a multi-page guide)
     public_ack: str = ""
     use_agent: bool = False
+    accounts: tuple[str, ...] = ()
 
     @property
     def all_images(self) -> list[str]:
@@ -110,6 +111,7 @@ def _load_raw(path_str: str, mtime: float) -> tuple[CommentReply, ...]:
                 image_urls=image_urls,
                 public_ack=str(spec.get("public_ack", "")).strip(),
                 use_agent=bool(spec.get("use_agent", False)),
+                accounts=_parse_accounts(spec.get("accounts")),
             )
         )
     return tuple(rules)
@@ -124,10 +126,28 @@ def load_rules() -> tuple[CommentReply, ...]:
     return _load_raw(str(path), mtime)
 
 
-def match(text: str) -> CommentReply | None:
-    """Return the first rule whose keyword appears in ``text`` (or None)."""
+def _parse_accounts(value: object) -> tuple[str, ...]:
+    if not value:
+        return ()
+    if isinstance(value, str):
+        return (value.strip(),) if value.strip() else ()
+    if isinstance(value, list):
+        return tuple(str(v).strip() for v in value if str(v).strip())
+    return ()
+
+
+def _account_allowed(rule: CommentReply, account_id: str | None) -> bool:
+    if not rule.accounts:
+        return True
+    if not account_id:
+        return False
+    return account_id in rule.accounts
+
+
+def match(text: str, *, account_id: str | None = None) -> CommentReply | None:
+    """Return the first matching rule allowed for this receiving account."""
     haystack = (text or "").lower()
     for rule in load_rules():
-        if rule.keyword and rule.keyword in haystack:
+        if rule.keyword and rule.keyword in haystack and _account_allowed(rule, account_id):
             return rule
     return None

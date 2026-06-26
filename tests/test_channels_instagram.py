@@ -180,20 +180,28 @@ def test_verify_subscription(monkeypatch):
 def test_comment_rules_match(tmp_path, monkeypatch):
     cfg = tmp_path / "rules.json"
     cfg.write_text(json.dumps({
-        "gut": {"dm_text": "腸胃懶人包", "image_url": "https://x/y.png", "public_ack": "send咗喇"},
-        "濕熱": {"dm_text": "濕熱調理", "use_agent": True},
+        "gut": {
+            "dm_text": "gut guide",
+            "image_url": "https://x/y.png",
+            "public_ack": "sent",
+            "accounts": ["jackie"],
+        },
+        "濕熱": {"dm_text": "濕熱調理", "use_agent": True, "accounts": ["chloe"]},
     }), encoding="utf-8")
     monkeypatch.setenv("COMMENT_RESPONSES_PATH", str(cfg))
     comment_rules._load_raw.cache_clear()
 
-    r = comment_rules.match("please send me GUT info")
-    assert r is not None and r.keyword == "gut" and r.dm_text == "腸胃懶人包"
+    r = comment_rules.match("please send me GUT info", account_id="jackie")
+    assert r is not None and r.keyword == "gut" and r.dm_text == "gut guide"
     assert r.use_agent is False
 
-    r2 = comment_rules.match("我想知濕熱")
+    assert comment_rules.match("please send me GUT info", account_id="chloe") is None
+
+    r2 = comment_rules.match("我想知濕熱", account_id="chloe")
     assert r2 is not None and r2.use_agent is True
 
-    assert comment_rules.match("random words") is None
+    assert comment_rules.match("我想知濕熱", account_id="jackie") is None
+    assert comment_rules.match("random words", account_id="jackie") is None
 
 
 @pytest.mark.unit

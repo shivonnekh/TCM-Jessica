@@ -323,7 +323,7 @@ async def _dispatch_dm(dm: IncomingDM, pipeline: JessicaPipeline) -> None:
 
     # Keyword guide short-circuit — "gut" etc. in a DM sends the canned
     # guide (images) directly, skipping the LLM. Same rules as comments.
-    rule = comment_rules.match(dm.text)
+    rule = comment_rules.match(dm.text, account_id=dm.recipient_id)
     if rule is not None and not rule.use_agent and await _should_send_canned_for_dm(dm, pipeline):
         await _persist_canned_interaction(
             pipeline,
@@ -399,7 +399,7 @@ async def handle_comment(comment: IncomingComment, pipeline: JessicaPipeline) ->
         logger.info("[meta] duplicate comment intent %s — already handled", intent_key)
         return
 
-    rule = comment_rules.match(comment.text)
+    rule = comment_rules.match(comment.text, account_id=comment.recipient_id or None)
     if rule is None:
         logger.info("[meta] comment %s: no rule match — skipping", comment.comment_id)
         return
