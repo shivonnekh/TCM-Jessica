@@ -309,7 +309,19 @@ async def handle_comment(comment: IncomingComment, pipeline: JessicaPipeline) ->
     """
     rule = comment_rules.match(comment.text)
     if rule is None:
-        logger.info("[meta] comment %s: no rule match — skipping", comment.comment_id)
+        # Catch-all: if this account has a registered agent (e.g. Jackie),
+        # post a public ack on the thread and open a DM conversation.
+        _agent = _get_agent(comment.recipient_id or None)
+        if _agent is not None and hasattr(_agent, "comment_ack"):
+            ack = _agent.comment_ack
+            if ack:
+                await meta_client.reply_to_comment(
+                    comment.comment_id, ack, platform=comment.platform,
+                    account_id=comment.recipient_id or None,
+                )
+            await _comment_via_account_agent(comment)
+        else:
+            logger.info("[meta] comment %s: no rule match — skipping", comment.comment_id)
         return
 
     # Optional public acknowledgement on the thread (per-rule).
@@ -384,6 +396,52 @@ async def _comment_via_agent(comment: IncomingComment, pipeline: JessicaPipeline
     )
     if not send.ok:
         logger.warning("[meta] agent private reply failed: %s", send.detail)
+
+
+async def _comment_via_account_agent(comment: IncomingComment) -> None:
+    """Catch-all DM for accounts with a registered ChloeAgent (e.g. Jackie).
+
+    Uses the commenter's IG id as the CRM key so each unique commenter gets
+    their own conversation thread. Sends greeting + first response as a
+    private reply (comment→DM) linked to the original comment.
+    """
+    _agent = _get_agent(comment.recipient_id or None)
+    if _agent is None:
+        return
+    try:
+        reply = await _agent.respond(
+            crm_key=comment.crm_key,
+            user_message=comment.text,
+            message_id=comment.comment_id,
+        )
+        bubbles = [b for b in reply.bubbles if b.strip()]
+    except Exception:  # noqa: BLE001
+        logger.exception("[meta] account agent failed for comment %s", comment.comment_id)
+        return
+
+    if not bubbles:
+        return
+
+    # Send greeting + reply as a private reply (appears as DM linked to comment).
+    for i, bubble in enumerate(bubbles):
+        if i == 0:
+            send = await meta_client.send_private_reply(
+                comment.comment_id, bubble, platform=comment.platform,
+                account_id=comment.recipient_id or None,
+            )
+        else:
+            # Subsequent bubbles go as regular DMs to the commenter.
+            if not comment.from_id:
+                break
+            send = await meta_client.send_dm(
+                comment.from_id, bubble, platform=comment.platform,
+                account_id=comment.recipient_id or None,
+            )
+        if not send.ok:
+            logger.warning("[meta] account agent DM bubble %d failed: %s", i, send.detail)
+            break
+        if i < len(bubbles) - 1:
+            await asyncio.sleep(_BUBBLE_PAUSE_S)
 
 
 # ---------------------------------------------------------------------------

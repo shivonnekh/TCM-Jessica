@@ -48,6 +48,7 @@ class ChloePersona:
     model: str
     max_tokens: int
     max_bubbles: int
+    comment_ack: str = ""  # Public reply posted on the comment thread (catch-all)
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ def _load_persona(path_str: str, mtime: float) -> ChloePersona:
         model=str(data.get("model", "gpt-4o-mini")),
         max_tokens=int(data.get("max_tokens", 400)),
         max_bubbles=int(data.get("max_bubbles", 3)),
+        comment_ack=str(data.get("comment_ack", "")).strip(),
     )
 
 
@@ -93,6 +95,19 @@ class ChloeAgent:
         self._persona_path = persona_path  # None → use global default
         self._consult = None  # consultation layer removed
 
+    def _persona(self) -> ChloePersona:
+        """Load and return the active persona (cached by mtime)."""
+        if self._persona_path:
+            p = Path(self._persona_path)
+            mtime = p.stat().st_mtime if p.exists() else 0.0
+            return _load_persona(self._persona_path, mtime)
+        return load_persona()
+
+    @property
+    def comment_ack(self) -> str:
+        """Public ack text to post on the comment thread (empty = no public ack)."""
+        return self._persona().comment_ack
+
     async def respond(
         self, *, crm_key: str, user_message: str, message_id: str | None = None
     ) -> ChloeReply:
@@ -101,10 +116,7 @@ class ChloeAgent:
         Greeting-first: when the user has no prior conversation history,
         the persona greeting bubbles are sent first, then her answer.
         """
-        persona = (load_persona() if not self._persona_path
-                   else _load_persona(self._persona_path,
-                                      Path(self._persona_path).stat().st_mtime
-                                      if Path(self._persona_path).exists() else 0.0))
+        persona = self._persona()
 
         # 1. Load user + decide if this is a first-touch conversation.
         # GREET ONCE PER USER: key the greeting off whether the user record
