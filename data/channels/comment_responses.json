@@ -1,7 +1,9 @@
-{
-  "gut": {
+[
+  {
+    "keyword": "gut",
     "language": "en",
-    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM gut tip: bloating and sluggish digestion often come from weak Spleen Qi and damp buildup. For the next 3 days, keep meals warm and simple, avoid iced drinks, and stop eating when you're about 80% full.\n\nIf you want the detailed gut guide images to save and refer to, reply GUIDE and I'll send them here 👇",
+    "accounts": ["17841417304649448"],
+    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM gut tip: bloating and sluggish digestion often come from weak Spleen Qi and damp buildup. For the next 3 days, keep meals warm and simple, avoid iced drinks, and stop eating when you're about 80% full.\n\nI've put together a gut guide for you — images below, save them!\n\nWant to tell me more about what you're experiencing? Reply here 👇",
     "image_urls": [
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-1.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-2.png",
@@ -9,108 +11,114 @@
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-4.png"
     ],
     "public_ack": "I've sent you the TCM gut guide — check your DM! 🌿",
-    "use_agent": false,
-    "accounts": [
-      "17841417304649448"
-    ]
+    "use_agent": false
   },
-  "濕熱": {
+  {
+    "keyword": "gut",
     "language": "yue",
-    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nIn TCM, damp-heat can show up as heaviness, oily skin, bad breath, sticky stools, or a bitter taste. A simple first step: avoid fried/spicy food for a few days and drink warm water instead of iced drinks.\n\nTell me what symptoms you're noticing, and I'll point you in the right direction.",
-    "public_ack": "I've sent you a quick TCM note — check your DM! 🌿",
-    "use_agent": false,
-    "accounts": [
-      "17841424706900394"
-    ]
+    "accounts": ["17841424706900394"],
+    "dm_text": "多謝你留言！🌿 我係芷晴～\n\n腸胃差喺中醫角度，通常係脾胃虛弱同濕邪積聚。最簡單嘅開始：飲暖水代替凍飲，食七八分飽，少食生冷同油膩嘅嘢。\n\n我整咗一份中醫腸胃養生懶人包俾你，圖片喺下面，記得儲低！\n\n有任何症狀想傾？回覆我 👇",
+    "image_urls": [
+      "https://tcm-jessica.onrender.com/media/guides/gut-page-1.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-page-2.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-page-3.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-page-4.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-page-5.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-page-6.png"
+    ],
+    "public_ack": "Send咗中醫腸胃懶人包俾你喇 — 入嚟睇下 DM！🌿",
+    "use_agent": false
   },
-  "knee": {
+  {
+    "keyword": "濕熱",
+    "language": "yue",
+    "accounts": ["17841424706900394"],
+    "dm_text": "多謝你留言！🌿 我係芷晴～\n\n濕熱喺中醫係好常見嘅問題，會出現身重、皮膚出油、口氣、大便黏膩或者口苦。第一步最簡單：戒幾日炸嘢辣嘢，飲暖水代替凍飲。\n\n你最近有咩唔舒服？話俾我知，我幫你睇下係咩方向 👇",
+    "public_ack": "Send咗啲中醫建議俾你喇 — 入嚟睇下 DM！🌿",
+    "use_agent": false
+  },
+  {
+    "keyword": "knee",
     "language": "en",
+    "accounts": ["17841417304649448"],
     "dm_text": "Hey! Saw your comment — I've put together my TCM Knee Pain guide just for you 🌿\n\nThe images below break down why your knees are struggling and exactly what to do about it from a TCM perspective. Save them!\n\nIf you want me to take a closer look at your specific situation, just reply here and let's chat 👇",
-    "public_ack": "I've sent you the knee pain guide — check your DM! 🌿",
     "image_urls": [
       "https://tcm-jessica.onrender.com/media/guides/knee-page-1.png",
       "https://tcm-jessica.onrender.com/media/guides/knee-page-2.png",
       "https://tcm-jessica.onrender.com/media/guides/knee-page-3.png",
       "https://tcm-jessica.onrender.com/media/guides/knee-page-4.png"
     ],
-    "use_agent": false,
-    "accounts": [
-      "17841417304649448"
-    ]
-  },
-  "knee pain": {
-    "language": "en",
-    "dm_text": "Hey! Saw your comment — I've put together my TCM Knee Pain guide just for you 🌿\n\nThe images below break down why your knees are struggling and exactly what to do about it from a TCM perspective. Save them!\n\nIf you want me to take a closer look at your specific situation, just reply here and let's chat 👇",
     "public_ack": "I've sent you the knee pain guide — check your DM! 🌿",
+    "use_agent": false
+  },
+  {
+    "keyword": "knee pain",
+    "language": "en",
+    "accounts": ["17841417304649448"],
+    "dm_text": "Hey! Saw your comment — I've put together my TCM Knee Pain guide just for you 🌿\n\nThe images below break down why your knees are struggling and exactly what to do about it from a TCM perspective. Save them!\n\nIf you want me to take a closer look at your specific situation, just reply here and let's chat 👇",
     "image_urls": [
       "https://tcm-jessica.onrender.com/media/guides/knee-page-1.png",
       "https://tcm-jessica.onrender.com/media/guides/knee-page-2.png",
       "https://tcm-jessica.onrender.com/media/guides/knee-page-3.png",
       "https://tcm-jessica.onrender.com/media/guides/knee-page-4.png"
     ],
-    "use_agent": false,
-    "accounts": [
-      "17841417304649448"
-    ]
+    "public_ack": "I've sent you the knee pain guide — check your DM! 🌿",
+    "use_agent": false
   },
-  "detox": {
+  {
+    "keyword": "detox",
     "language": "en",
-    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM detox tip: detox is not about flushing your body — it's about helping Qi move and reducing damp buildup. For the next 3 days, keep dinners lighter, avoid fried/greasy food, and drink warm water instead of iced drinks.\n\nIf you want the detailed detox guide images to save and refer to, reply GUIDE and I'll send them here 👇",
-    "public_ack": "I've sent you the TCM detox guide — check your DM! 🌿",
+    "accounts": ["17841417304649448"],
+    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM detox tip: detox is not about flushing your body — it's about helping Qi move and reducing damp buildup. For the next 3 days, keep dinners lighter, avoid fried/greasy food, and drink warm water instead of iced drinks.\n\nI've put together a detox guide for you — images below, save them!\n\nWant to chat more? Reply here 👇",
     "image_urls": [
       "https://tcm-jessica.onrender.com/media/guides/detox-page-1.png",
       "https://tcm-jessica.onrender.com/media/guides/detox-page-2.png",
       "https://tcm-jessica.onrender.com/media/guides/detox-page-3.png",
       "https://tcm-jessica.onrender.com/media/guides/detox-page-4.png"
     ],
-    "use_agent": false,
-    "accounts": [
-      "17841417304649448"
-    ]
-  },
-  "cleanse": {
-    "language": "en",
-    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM detox tip: detox is not about flushing your body — it's about helping Qi move and reducing damp buildup. For the next 3 days, keep dinners lighter, avoid fried/greasy food, and drink warm water instead of iced drinks.\n\nIf you want the detailed detox guide images to save and refer to, reply GUIDE and I'll send them here 👇",
     "public_ack": "I've sent you the TCM detox guide — check your DM! 🌿",
+    "use_agent": false
+  },
+  {
+    "keyword": "cleanse",
+    "language": "en",
+    "accounts": ["17841417304649448"],
+    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM detox tip: detox is not about flushing your body — it's about helping Qi move and reducing damp buildup. For the next 3 days, keep dinners lighter, avoid fried/greasy food, and drink warm water instead of iced drinks.\n\nI've put together a detox guide for you — images below, save them!\n\nWant to chat more? Reply here 👇",
     "image_urls": [
       "https://tcm-jessica.onrender.com/media/guides/detox-page-1.png",
       "https://tcm-jessica.onrender.com/media/guides/detox-page-2.png",
       "https://tcm-jessica.onrender.com/media/guides/detox-page-3.png",
       "https://tcm-jessica.onrender.com/media/guides/detox-page-4.png"
     ],
-    "use_agent": false,
-    "accounts": [
-      "17841417304649448"
-    ]
+    "public_ack": "I've sent you the TCM detox guide — check your DM! 🌿",
+    "use_agent": false
   },
-  "tonsil": {
+  {
+    "keyword": "tonsil",
     "language": "en",
-    "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're often a sign of too much heat in the stomach. That means gut support is actually the right starting point.\n\nI've put together a TCM gut guide that covers exactly this — images below, save them!\n\nWant to tell me more about what you're experiencing? Reply here and I'll give you a more personalised direction 👇",
-    "public_ack": "I've sent you the guide — check your DM! 🌿",
+    "accounts": ["17841417304649448"],
+    "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're often a sign of too much heat in the stomach. That means gut support is actually the right starting point.\n\nI've put together a TCM gut guide that covers exactly this — images below, save them!\n\nWant to tell me more about what you're experiencing? Reply here 👇",
     "image_urls": [
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-1.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-2.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-3.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-4.png"
     ],
-    "use_agent": false,
-    "accounts": [
-      "17841417304649448"
-    ]
-  },
-  "tonsil stone": {
-    "language": "en",
-    "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're often a sign of too much heat in the stomach. That means gut support is actually the right starting point.\n\nI've put together a TCM gut guide that covers exactly this — images below, save them!\n\nWant to tell me more about what you're experiencing? Reply here and I'll give you a more personalised direction 👇",
     "public_ack": "I've sent you the guide — check your DM! 🌿",
+    "use_agent": false
+  },
+  {
+    "keyword": "tonsil stone",
+    "language": "en",
+    "accounts": ["17841417304649448"],
+    "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're often a sign of too much heat in the stomach. That means gut support is actually the right starting point.\n\nI've put together a TCM gut guide that covers exactly this — images below, save them!\n\nWant to tell me more about what you're experiencing? Reply here 👇",
     "image_urls": [
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-1.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-2.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-3.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-en-page-4.png"
     ],
-    "use_agent": false,
-    "accounts": [
-      "17841417304649448"
-    ]
+    "public_ack": "I've sent you the guide — check your DM! 🌿",
+    "use_agent": false
   }
-}
+]

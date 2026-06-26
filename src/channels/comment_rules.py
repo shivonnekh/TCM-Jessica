@@ -93,7 +93,13 @@ def _config_path() -> Path:
 @lru_cache(maxsize=1)
 def _load_raw(path_str: str, mtime: float) -> tuple[CommentReply, ...]:
     """Parse + validate the rules file. Cached on (path, mtime) so edits
-    are picked up without a restart but we don't re-read on every comment."""
+    are picked up without a restart but we don't re-read on every comment.
+
+    Supports two formats:
+      - Array (preferred): list of rule objects, each with a "keyword" field.
+        Allows the same keyword to appear multiple times for different accounts.
+      - Object (legacy): dict keyed by keyword. Cannot have duplicate keywords.
+    """
     path = Path(path_str)
     if not path.exists():
         return ()
@@ -102,14 +108,23 @@ def _load_raw(path_str: str, mtime: float) -> tuple[CommentReply, ...]:
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("[comment_rules] failed to load %s: %s", path, exc)
         return ()
-    if not isinstance(data, dict):
-        logger.warning("[comment_rules] root is not an object — ignoring")
+
+    # Normalise to a flat list of spec dicts
+    if isinstance(data, list):
+        items: list[object] = data
+    elif isinstance(data, dict):
+        # Legacy object format — inject the dict key as "keyword"
+        items = [{"keyword": k, **v} for k, v in data.items() if isinstance(v, dict)]
+    else:
+        logger.warning("[comment_rules] root is not an array or object — ignoring")
         return ()
 
     rules: list[CommentReply] = []
-    for keyword, spec in data.items():
-        kw = str(keyword).strip().lower()
-        if not kw or not isinstance(spec, dict):
+    for spec in items:
+        if not isinstance(spec, dict):
+            continue
+        kw = str(spec.get("keyword", "")).strip().lower()
+        if not kw:
             continue
         raw_imgs = spec.get("image_urls") or []
         image_urls = tuple(str(u).strip() for u in raw_imgs if str(u).strip()) \
