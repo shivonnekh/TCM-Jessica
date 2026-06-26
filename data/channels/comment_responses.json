@@ -2,12 +2,10 @@
   "gut": {
     "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM gut tip: bloating and sluggish digestion often come from weak Spleen Qi and damp buildup. For the next 3 days, keep meals warm and simple, avoid iced drinks, and stop eating when you're about 80% full.\n\nIf you want the detailed gut guide images to save and refer to, reply GUIDE and I'll send them here 👇",
     "image_urls": [
-      "https://tcm-jessica.onrender.com/media/guides/gut-page-1.png",
-      "https://tcm-jessica.onrender.com/media/guides/gut-page-2.png",
-      "https://tcm-jessica.onrender.com/media/guides/gut-page-3.png",
-      "https://tcm-jessica.onrender.com/media/guides/gut-page-4.png",
-      "https://tcm-jessica.onrender.com/media/guides/gut-page-5.png",
-      "https://tcm-jessica.onrender.com/media/guides/gut-page-6.png"
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-1.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-2.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-3.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-4.png"
     ],
     "public_ack": "I've sent you the TCM gut guide — check your DM! 🌿",
     "use_agent": false,
@@ -26,7 +24,12 @@
   "knee": {
     "dm_text": "Hey! Saw your comment — I've put together my TCM Knee Pain guide just for you 🌿\n\nThe images below break down why your knees are struggling and exactly what to do about it from a TCM perspective. Save them!\n\nIf you want me to take a closer look at your specific situation, just reply here and let's chat 👇",
     "public_ack": "I've sent you the knee pain guide — check your DM! 🌿",
-    "image_urls": [],
+    "image_urls": [
+      "https://tcm-jessica.onrender.com/media/guides/knee-page-1.png",
+      "https://tcm-jessica.onrender.com/media/guides/knee-page-2.png",
+      "https://tcm-jessica.onrender.com/media/guides/knee-page-3.png",
+      "https://tcm-jessica.onrender.com/media/guides/knee-page-4.png"
+    ],
     "use_agent": false,
     "accounts": [
       "17841417304649448"
@@ -35,7 +38,12 @@
   "knee pain": {
     "dm_text": "Hey! Saw your comment — I've put together my TCM Knee Pain guide just for you 🌿\n\nThe images below break down why your knees are struggling and exactly what to do about it from a TCM perspective. Save them!\n\nIf you want me to take a closer look at your specific situation, just reply here and let's chat 👇",
     "public_ack": "I've sent you the knee pain guide — check your DM! 🌿",
-    "image_urls": [],
+    "image_urls": [
+      "https://tcm-jessica.onrender.com/media/guides/knee-page-1.png",
+      "https://tcm-jessica.onrender.com/media/guides/knee-page-2.png",
+      "https://tcm-jessica.onrender.com/media/guides/knee-page-3.png",
+      "https://tcm-jessica.onrender.com/media/guides/knee-page-4.png"
+    ],
     "use_agent": false,
     "accounts": [
       "17841417304649448"
