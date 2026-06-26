@@ -401,19 +401,7 @@ async def handle_comment(comment: IncomingComment, pipeline: JessicaPipeline) ->
 
     rule = comment_rules.match(comment.text)
     if rule is None:
-        # Catch-all: if this account has a registered agent (e.g. Jackie),
-        # open a DM conversation and only then post the public ack.
-        _agent = _get_agent(comment.recipient_id or None)
-        if _agent is not None and hasattr(_agent, "comment_ack"):
-            sent = await _comment_via_account_agent(comment)
-            ack = _agent.comment_ack
-            if sent and ack:
-                await meta_client.reply_to_comment(
-                    comment.comment_id, ack, platform=comment.platform,
-                    account_id=comment.recipient_id or None,
-                )
-        else:
-            logger.info("[meta] comment %s: no rule match — skipping", comment.comment_id)
+        logger.info("[meta] comment %s: no rule match — skipping", comment.comment_id)
         return
 
     if rule.use_agent:

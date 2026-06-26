@@ -1,6 +1,6 @@
 {
   "gut": {
-    "dm_text": "多謝你留言 🌿\n\n見到你想了解腸胃調理～我整理咗一份《腸胃調理懶人包》俾你，圖片就喺下面，可以直接 save 起慢慢睇 👇\n\n如果想我幫你睇下你係邊種體質、點調理得貼身啲，可以 WhatsApp 我 wa.me/85252417448 😊",
+    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nQuick TCM gut tip: bloating and sluggish digestion often come from weak Spleen Qi and damp buildup. For the next 3 days, keep meals warm and simple, avoid iced drinks, and stop eating when you're about 80% full.\n\nIf you want the detailed gut guide images to save and refer to, reply GUIDE and I'll send them here 👇",
     "image_urls": [
       "https://tcm-jessica.onrender.com/media/guides/gut-page-1.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-page-2.png",
@@ -9,12 +9,12 @@
       "https://tcm-jessica.onrender.com/media/guides/gut-page-5.png",
       "https://tcm-jessica.onrender.com/media/guides/gut-page-6.png"
     ],
-    "public_ack": "send咗份腸胃調理懶人包俾你喇，記得查下 DM 🌿",
+    "public_ack": "I've sent you the TCM gut guide — check your DM! 🌿",
     "use_agent": false
   },
   "濕熱": {
-    "dm_text": "收到你嘅留言 🌿\n\n濕熱體質好常見，通常會口苦、口氣重、易攰、皮膚易出問題。想知自己係咪濕熱、點調理，WhatsApp 我傾下啦：wa.me/85252417448 😊",
-    "public_ack": "send咗私訊俾你喇 🌿",
+    "dm_text": "Hey, I'm Jackie 🌿 Thanks for commenting.\n\nIn TCM, damp-heat can show up as heaviness, oily skin, bad breath, sticky stools, or a bitter taste. A simple first step: avoid fried/spicy food for a few days and drink warm water instead of iced drinks.\n\nTell me what symptoms you're noticing, and I'll point you in the right direction.",
+    "public_ack": "I've sent you a quick TCM note — check your DM! 🌿",
     "use_agent": false
   },
   "knee": {
