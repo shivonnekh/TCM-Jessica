@@ -78,18 +78,28 @@
     ]
   },
   "tonsil": {
-    "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're a signal of too much heat in the stomach and lungs. The good news: it's very manageable.\n\nI've put together a guide with what to do. Images are below — save them!\n\nWant to tell me more about what you're experiencing? Reply here and I'll help you figure out the right direction 👇",
-    "public_ack": "I've sent you the tonsil stone guide — check your DM! 🌿",
-    "image_urls": [],
+    "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're often a sign of too much heat in the stomach. That means gut support is actually the right starting point.\n\nI've put together a TCM gut guide that covers exactly this — images below, save them!\n\nWant to tell me more about what you're experiencing? Reply here and I'll give you a more personalised direction 👇",
+    "public_ack": "I've sent you the guide — check your DM! 🌿",
+    "image_urls": [
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-1.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-2.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-3.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-4.png"
+    ],
     "use_agent": false,
     "accounts": [
       "17841417304649448"
     ]
   },
   "tonsil stone": {
-    "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're a signal of too much heat in the stomach and lungs. The good news: it's very manageable.\n\nI've put together a guide with what to do. Images are below — save them!\n\nWant to tell me more about what you're experiencing? Reply here and I'll help you figure out the right direction 👇",
-    "public_ack": "I've sent you the tonsil stone guide — check your DM! 🌿",
-    "image_urls": [],
+    "dm_text": "Hey! Glad you reached out 🌿\n\nTonsil stones are way more common than people realise — and from a TCM perspective, they're often a sign of too much heat in the stomach. That means gut support is actually the right starting point.\n\nI've put together a TCM gut guide that covers exactly this — images below, save them!\n\nWant to tell me more about what you're experiencing? Reply here and I'll give you a more personalised direction 👇",
+    "public_ack": "I've sent you the guide — check your DM! 🌿",
+    "image_urls": [
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-1.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-2.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-3.png",
+      "https://tcm-jessica.onrender.com/media/guides/gut-en-page-4.png"
+    ],
     "use_agent": false,
     "accounts": [
       "17841417304649448"
