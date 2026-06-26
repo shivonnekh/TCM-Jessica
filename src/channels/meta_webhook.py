@@ -272,6 +272,9 @@ async def handle_dm(dm: IncomingDM, pipeline: JessicaPipeline) -> None:
 async def _dispatch_dm(dm: IncomingDM, pipeline: JessicaPipeline) -> None:
     """Reply to a (possibly merged) DM. Routes to Chloe when registered;
     otherwise falls back to the Jessica pipeline. Text + images interleave."""
+    if await _send_pending_guide_images(dm, pipeline):
+        return
+
     # Keyword guide short-circuit — "gut" etc. in a DM sends the canned
     # guide (images) directly, skipping the LLM. Same rules as comments.
     rule = comment_rules.match(dm.text)
@@ -398,22 +401,8 @@ async def _comment_via_canned(
             inbound_message_id=comment.comment_id,
             outbound_text=rule.dm_text,
             image_urls=rule.all_images,
+            pending_images=True,
         )
-    if comment.from_id:
-        for url in rule.all_images:
-            await asyncio.sleep(_MEDIA_PAUSE_S)
-            img = await meta_client.send_dm_image(
-                comment.from_id, url, platform=comment.platform,
-                account_id=comment.recipient_id or None,
-            )
-            if not img.ok:
-                logger.warning(
-                    "[meta] canned image failed for %s url=%s: %s",
-                    comment.comment_id,
-                    url,
-                    img.detail,
-                )
-                return False
     return True
 
 
@@ -513,6 +502,54 @@ async def _comment_via_account_agent(comment: IncomingComment) -> bool:
 # ---------------------------------------------------------------------------
 
 
+async def _send_pending_guide_images(dm: IncomingDM, pipeline: JessicaPipeline) -> bool:
+    """After a comment private reply, wait for the user's DM reply before images.
+
+    Instagram may allow the first comment→DM text but reject immediate follow-up
+    media while the thread is still in a message-request state. Once the user
+    replies in DM, they have opened the conversation, so we send the queued
+    protocol images before invoking the LLM.
+    """
+    crm = getattr(pipeline, "_crm", None)
+    if crm is None:
+        return False
+    try:
+        user = await crm.get_user(dm.crm_key)
+    except Exception:  # noqa: BLE001
+        logger.exception("[meta] failed to load pending guide state for %s", dm.crm_key)
+        return False
+    state = dict(getattr(user, "temp_state", {}) or {}) if user is not None else {}
+    urls = [u for u in state.get("meta_pending_guide_images", []) if isinstance(u, str)]
+    if not urls:
+        return False
+
+    await _persist_canned_interaction(
+        pipeline,
+        crm_key=dm.crm_key,
+        inbound_text=dm.text,
+        inbound_message_id=dm.message_id,
+        outbound_text="[sent pending guide images]",
+        image_urls=urls,
+    )
+    for url in urls:
+        await asyncio.sleep(_MEDIA_PAUSE_S)
+        img = await meta_client.send_dm_image(
+            dm.sender_id, url, platform=dm.platform, account_id=dm.recipient_id
+        )
+        if not img.ok:
+            logger.warning("[meta] pending guide image failed url=%s: %s", url, img.detail)
+            return True
+
+    if user is not None:
+        state.pop("meta_pending_guide_images", None)
+        state.pop("meta_pending_guide_text", None)
+        try:
+            await crm.save_user(user.with_updates(temp_state=state))
+        except Exception:  # noqa: BLE001
+            logger.exception("[meta] failed to clear pending guide state for %s", dm.crm_key)
+    return True
+
+
 async def _persist_canned_interaction(
     pipeline: JessicaPipeline,
     *,
@@ -521,13 +558,19 @@ async def _persist_canned_interaction(
     inbound_message_id: str | None,
     outbound_text: str,
     image_urls: list[str],
+    pending_images: bool = False,
 ) -> None:
     """Store canned guide exchanges so later agent replies have context."""
     crm = getattr(pipeline, "_crm", None)
     if crm is None:
         return
     try:
-        await crm.get_or_create_user(crm_key)
+        user = await crm.get_or_create_user(crm_key)
+        if pending_images and image_urls:
+            state = dict(getattr(user, "temp_state", {}) or {})
+            state["meta_pending_guide_images"] = list(image_urls)
+            state["meta_pending_guide_text"] = outbound_text
+            await crm.save_user(user.with_updates(temp_state=state))
         now = datetime.utcnow()
         await crm.append_message(
             crm_key,

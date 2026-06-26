@@ -23,6 +23,7 @@ from src.channels.meta_events import (
     IncomingDM,
     parse_meta_webhook,
 )
+from src.crm.models import User
 
 # ---------------------------------------------------------------------------
 # Payload builders
@@ -290,13 +291,14 @@ async def test_handle_comment_canned_no_agent(monkeypatch, tmp_path):
     assert pipe.calls == []                       # agent never ran
     assert private == [("c1", "腸胃懶人包送俾你")]   # canned DM sent
     assert public == [("c1", "send咗喇")]          # public ack sent
-    assert images == [("U9", "https://x/g.png")]   # image followed
+    assert images == []                             # images wait for DM reply
 
 
 class _FakeCRM:
     def __init__(self):
         self.claimed = set()
         self.messages = []
+        self.users = {}
 
     async def try_claim_webhook_event(self, event_id, kind):
         if event_id in self.claimed:
@@ -304,8 +306,16 @@ class _FakeCRM:
         self.claimed.add(event_id)
         return True
 
+    async def get_user(self, phone):
+        return self.users.get(phone)
+
     async def get_or_create_user(self, phone):
-        return object()
+        if phone not in self.users:
+            self.users[phone] = User(phone=phone)
+        return self.users[phone]
+
+    async def save_user(self, user):
+        self.users[user.phone] = user
 
     async def append_message(self, phone, msg):
         self.messages.append((phone, msg))
@@ -351,12 +361,39 @@ async def test_handle_comment_persistent_dedup_blocks_repeat(monkeypatch, tmp_pa
 
     assert private == [("c1", "腸胃懶人包送俾你")]
     assert public == [("c1", "send咗喇")]
-    assert images == [("U9", "https://x/g.png")]
+    assert images == []
+    assert crm.users["ig_U9"].temp_state["meta_pending_guide_images"] == ["https://x/g.png"]
     assert [m[0] for m in crm.messages] == ["ig_U9", "ig_U9"]
     assert crm.messages[0][1].role == "user"
     assert crm.messages[0][1].content == "gut pls"
     assert crm.messages[1][1].role == "chloe"
     assert crm.messages[1][1].media_urls == ["https://x/g.png"]
+
+
+@pytest.mark.asyncio
+async def test_dm_reply_sends_pending_comment_guide_images(monkeypatch):
+    monkeypatch.setattr(meta_webhook, "_MEDIA_PAUSE_S", 0.0)
+    images = []
+
+    async def fake_img(rid, url, *, platform="instagram", **_):
+        images.append((rid, url)); return meta_client.SendResult(True)
+
+    monkeypatch.setattr(meta_client, "send_dm_image", fake_img)
+
+    crm = _FakeCRM()
+    await crm.save_user(User(phone="ig_U9", temp_state={
+        "meta_pending_guide_images": ["https://x/g1.png", "https://x/g2.png"],
+    }))
+    pipe = _FakePipeline(["AGENT SHOULD NOT RUN"])
+    pipe._crm = crm
+
+    dm = IncomingDM(platform="instagram", sender_id="U9", recipient_id="BIZ",
+                    text="yes please", message_id="m2", timestamp=0)
+    await meta_webhook._dispatch_dm(dm, pipe)
+
+    assert images == [("U9", "https://x/g1.png"), ("U9", "https://x/g2.png")]
+    assert pipe.calls == []
+    assert "meta_pending_guide_images" not in crm.users["ig_U9"].temp_state
 
 
 @pytest.mark.asyncio
