@@ -48,3 +48,8 @@ traces/
 traces_dev/
 traces_qa/
 venv/
+
+# Agent worktrees
+.claude/worktrees/
+.observer.lock
+.playwright-mcp/
