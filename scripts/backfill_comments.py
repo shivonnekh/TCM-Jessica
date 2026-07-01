@@ -7,11 +7,21 @@ match, and silently skipped it forever. There is no "resend" on Meta's side.
 This script closes that gap by pulling a post's comments directly via the
 Graph API (read-only ``GET /{media_id}/comments``) and feeding each one through
 the EXACT SAME ``handle_comment()`` used by the live webhook — same dedup,
-same rule matching, same send calls. Safe to re-run: idempotency claims
-(when a real CRM/pipeline is wired) or Meta's own dedup on repeated identical
-private replies prevent double-sends. Here we run with ``pipeline=None``
-(fine for ``use_agent: false`` canned rules — the only kind currently
-configured), so no CRM persistence happens, just the actual Graph API sends.
+same rule matching, same send calls.
+
+⚠️ RUNS WITH ``pipeline=None`` — NO CRM PERSISTENCE, AND EVEN IF YOU WIRE ONE
+IN, RUNNING THIS LOCALLY WRITES TO YOUR LOCAL SQLITE, NOT PRODUCTION POSTGRES.
+That means a user's follow-up reply (e.g. "1" answering a numbered protocol)
+will have NO context — Jackie/Chloe will have no memory the DM was ever sent.
+2026-07-01 incident: David replied "1" to a migraine-type DM sent via this
+script; the live agent had zero history and replied with a generic
+"your message got cut off" — confusing, looked broken.
+
+RULE OF THUMB: safe for pure one-shot canned rules with no expected reply.
+For anything conversational (numbered options, "reply here", follow-up
+questions), use ``POST /admin/backfill-comments`` on the LIVE deployed
+service instead — same logic, but runs inside the real app process against
+the real production CRM, so persistence + follow-up context work correctly.
 
 Usage:
     python scripts/backfill_comments.py <media_id> [<media_id> ...]

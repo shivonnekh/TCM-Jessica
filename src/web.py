@@ -297,6 +297,65 @@ async def admin_recent_webhooks(limit: int = 20, group_only: bool = False) -> JS
     return JSONResponse(diagnostic_capture.recent(limit=limit, group_only=group_only))
 
 
+@app.post("/admin/backfill-comments")
+async def admin_backfill_comments(request: Request) -> JSONResponse:
+    """Replay a post's existing comments through the LIVE handle_comment()
+    pipeline — same code path as ``scripts/backfill_comments.py``, but running
+    inside this process means the real production CRM gets used, so
+    canned-DM interactions are persisted correctly and a user's next reply
+    (e.g. "1" answering a numbered protocol) has real context.
+
+    scripts/backfill_comments.py (run locally) is fine for one-shot canned
+    replies with no expected follow-up, but MUST NOT be used for anything
+    conversational — it has no access to the production database, so it
+    silently produces context-less follow-ups (see 2026-07-01 incident:
+    David replied "1" to a migraine-type DM sent via the local script, and
+    Jackie had no memory the protocol was ever sent).
+
+    Body: ``{"media_ids": ["...", "..."]}``. Auth: same shared secret as
+    ``/admin/notion-sync``.
+    """
+    expected = os.environ.get("NOTION_SYNC_SECRET", "")
+    if not expected or request.headers.get("X-Sync-Secret", "") != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    body = await request.json()
+    media_ids = body.get("media_ids") or []
+    if not media_ids or not isinstance(media_ids, list):
+        return JSONResponse({"error": "missing media_ids (list)"}, status_code=400)
+
+    from src.channels import meta_client
+    from src.channels.meta_events import IncomingComment
+    from src.channels.meta_webhook import handle_comment
+
+    account_id = body.get("account_id", "17841417304649448")
+    pipeline: JessicaPipeline = request.app.state.pipeline
+    summary: dict[str, list[str]] = {}
+
+    for media_id in media_ids:
+        comments = await meta_client.list_comments(media_id, platform="instagram", account_id=account_id)
+        processed = []
+        for raw in comments:
+            comment_id = str(raw.get("id") or "")
+            from_id = str((raw.get("from") or {}).get("id") or "")
+            if not comment_id or not from_id:
+                continue
+            comment = IncomingComment(
+                platform="instagram",
+                comment_id=comment_id,
+                text=str(raw.get("text") or ""),
+                from_id=from_id,
+                from_username=str((raw.get("from") or {}).get("username") or ""),
+                media_id=media_id,
+                recipient_id=account_id,
+            )
+            await handle_comment(comment, pipeline)  # real CRM — persists correctly
+            processed.append(f"{comment_id}: {raw.get('text', '')!r}")
+        summary[media_id] = processed
+
+    return JSONResponse({"status": "done", "processed": summary})
+
+
 @app.post("/admin/notion-sync")
 async def admin_notion_sync(request: Request) -> JSONResponse:
     """Notion Automation calls this the moment a Production row's Stage
