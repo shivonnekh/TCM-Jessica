@@ -19,6 +19,11 @@ Send primitives:
     reply_to_comment(comment_id, text, *, platform)
         Public reply on the comment thread: ``POST /{comment_id}/replies``.
 
+    list_recent_media(*, platform, account_id) / list_comments(media_id, *, platform, account_id)
+        Read-only GET helpers used for one-off backfills (e.g. replaying
+        comments that arrived before a keyword rule existed — see
+        ``scripts/backfill_comments.py``). Not used by the live webhook path.
+
 Credentials (per platform):
     instagram → IG_PAGE_ACCESS_TOKEN + IG_USER_ID
     facebook  → FB_PAGE_ACCESS_TOKEN + FB_PAGE_ID
@@ -209,6 +214,79 @@ async def reply_to_comment(
         return SendResult(False, f"transport: {exc}")
 
     return _interpret(resp, context=f"{platform}:comment_reply→{comment_id}")
+
+
+async def list_recent_media(
+    *, platform: Platform = "instagram", account_id: str | None = None, limit: int = 25,
+) -> list[dict]:
+    """GET /{business_id}/media — recent posts/reels for this account.
+
+    Read-only diagnostic/backfill helper: lets us resolve a post's media id
+    from its caption instead of asking Meta to "resend" history (webhooks
+    never replay past events).
+    """
+    creds = _creds(platform, account_id)
+    if not creds.complete:
+        logger.warning("[meta] missing %s credentials — cannot list media", platform)
+        return []
+    url = _graph_url(platform, f"{creds.sender_id}/media")
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
+            resp = await client.get(
+                url,
+                params={
+                    "fields": "id,caption,permalink,timestamp",
+                    "limit": str(limit),
+                    "access_token": creds.token,
+                },
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("[meta] list media transport error: %s", exc)
+        return []
+    if resp.status_code != 200:
+        logger.warning("[meta] list media failed HTTP %d: %s", resp.status_code, resp.text[:200])
+        return []
+    return resp.json().get("data", [])
+
+
+async def list_comments(
+    media_id: str, *, platform: Platform = "instagram", account_id: str | None = None,
+) -> list[dict]:
+    """GET /{media_id}/comments — every top-level comment on a post/reel.
+
+    Read-only backfill helper (see ``list_recent_media``). Paginates through
+    all results. Does not fetch nested replies (``is_reply_to_comment``
+    filtering happens on the ``parent_id`` field the webhook payload would
+    have set, which this endpoint does not return — replies are excluded by
+    only reading top-level comments here).
+    """
+    creds = _creds(platform, account_id)
+    if not creds.complete:
+        logger.warning("[meta] missing %s credentials — cannot list comments", platform)
+        return []
+    url = _graph_url(platform, f"{media_id}/comments")
+    params = {
+        "fields": "id,text,username,from,timestamp",
+        "access_token": creds.token,
+    }
+    out: list[dict] = []
+    async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
+        while url:
+            try:
+                resp = await client.get(url, params=params)
+            except httpx.HTTPError as exc:
+                logger.warning("[meta] list comments transport error: %s", exc)
+                break
+            if resp.status_code != 200:
+                logger.warning(
+                    "[meta] list comments failed HTTP %d: %s", resp.status_code, resp.text[:200]
+                )
+                break
+            body = resp.json()
+            out.extend(body.get("data", []))
+            url = body.get("paging", {}).get("next")
+            params = {}  # ``next`` already carries all query params
+    return out
 
 
 # ---------------------------------------------------------------------------

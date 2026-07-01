@@ -146,3 +146,23 @@ services:
       # "use_agent": true. Edit data/channels/comment_responses.json.
       - key: COMMENT_RESPONSES_PATH
         value: data/channels/comment_responses.json
+
+      # ── Notion auto-sync (POST /admin/notion-sync) ───────────
+      # Notion Automation calls this when a Production Tracker row's Stage
+      # flips to "✅ Published" — drafts + wires the row's CTA keyword into
+      # comment_responses.json immediately, no redeploy needed.
+      # NOTION_KEY: same integration token used by ai-tcm-ip's Notion board.
+      - key: NOTION_KEY
+        sync: false
+      # NOTION_SYNC_SECRET: any random string YOU invent. Paste the SAME
+      # value into the Notion Automation's webhook custom header
+      # (X-Sync-Secret). Endpoint returns 401 without a matching value.
+      - key: NOTION_SYNC_SECRET
+        sync: false
+      # GITHUB_PUSH_TOKEN: fine-grained GitHub PAT, Contents:write scope on
+      # shivonnekh/TCM-Jessica ONLY. Lets the sync persist new rules back to
+      # git so they survive the next deploy (the in-memory write already
+      # takes effect immediately without this — this is durability, not
+      # correctness). Omit and the sync still works, just non-durable.
+      - key: GITHUB_PUSH_TOKEN
+        sync: false

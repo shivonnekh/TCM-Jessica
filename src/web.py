@@ -297,6 +297,49 @@ async def admin_recent_webhooks(limit: int = 20, group_only: bool = False) -> JS
     return JSONResponse(diagnostic_capture.recent(limit=limit, group_only=group_only))
 
 
+@app.post("/admin/notion-sync")
+async def admin_notion_sync(request: Request) -> JSONResponse:
+    """Notion Automation calls this the moment a Production row's Stage
+    flips to '✅ Published'. Drafts + wires the row's CTA keyword into
+    ``comment_responses.json`` immediately (no redeploy needed — the rule
+    engine reloads on file mtime change), then best-effort pushes the
+    change to GitHub so it survives the next deploy.
+
+    Auth: shared-secret header (this endpoint writes to a live repo and
+    triggers real outbound DMs' content going forward — must not be open).
+    Configure the SAME value in the Notion Automation's webhook headers.
+    """
+    expected = os.environ.get("NOTION_SYNC_SECRET", "")
+    if not expected or request.headers.get("X-Sync-Secret", "") != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    from src import git_publish, notion_sync
+
+    try:
+        result = notion_sync.sync_once()
+    except notion_sync.NotionSyncError as exc:
+        logger.exception("[notion-sync] failed")
+        return JSONResponse({"error": str(exc)}, status_code=502)
+
+    if result["rules_changed"]:
+        push = git_publish.push_paths(
+            ["data/channels/comment_responses.json", "data/channels/notion_sync_state.json"],
+            message=f"chore: notion-sync — {len(result['added'])} new keyword rule(s)",
+        )
+        result["git_push"] = push
+    else:
+        # Still persist state (rows we decided to skip permanently) even
+        # with no new rules, so we don't re-check them every trigger.
+        push = git_publish.push_paths(
+            ["data/channels/notion_sync_state.json"], message="chore: notion-sync — state update",
+        )
+        result["git_push"] = push
+
+    logger.info("[notion-sync] added=%d skipped=%d errors=%d",
+                len(result["added"]), len(result["skipped"]), len(result["errors"]))
+    return JSONResponse(result)
+
+
 @app.post("/api/dev-chat")
 async def dev_chat(request: Request) -> JSONResponse:
     """Dev-sandbox pipeline runner.

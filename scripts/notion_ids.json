@@ -1,0 +1,7 @@
+{
+  "page": "389f2a3f-4320-8067-8683-fb82eb056ee6",
+  "content_db": "389f2a3f-4320-81f8-9428-cd01f1d36add",
+  "ip_db": "389f2a3f-4320-8155-bb64-c4a576610bef",
+  "prod_db": "389f2a3f-4320-817b-9363-f09b0c4b04b2",
+  "_note": "DB ids for the AI-IP Content board. NOT secret. Notion token lives in NOTION_KEY env var, never here."
+}
