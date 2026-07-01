@@ -38,6 +38,7 @@ from src.agents.registry import SpecialistProtocol
 from src.agents.writer import WriterAgent
 from src.crm.models import ConversationMessage, User
 from src.crm.repo import CRMRepo
+from src.personas.profile import PersonaProfile
 from src.trace.models import (
     SpecialistTrace,
     StepTrace,
@@ -83,7 +84,17 @@ class JessicaPipeline:
         media_urls: list[str] | None = None,
         merged_from_fragments: list[str] | None = None,
         wa_message_id: str | None = None,
+        profile: PersonaProfile | None = None,
     ) -> PipelineResult:
+        """Run one turn: Planner -> Specialists -> Writer.
+
+        ``profile`` is OPTIONAL and defaults to ``None`` — every existing
+        call site (WhatsApp webhook, meta_webhook.py's Jessica-pipeline
+        fallback, QA scripts) omits it, so behaviour is UNCHANGED (Phase 0
+        scaffolding; see src/personas/profile.py module docstring). When
+        supplied, it is threaded through to the Planner (specialist-scope
+        clamp) and Writer (profile-driven system prompt) only.
+        """
         turn_id = _new_turn_id()
         media_urls = media_urls or []
         merged_from_fragments = merged_from_fragments or []
@@ -110,7 +121,7 @@ class JessicaPipeline:
             planner_step = StepTrace(input={"user_message": user_message})
             t0 = _now_ms()
             decision, planner_usage = await self._planner.decide(
-                user_for_planner, user_message, media_urls=media_urls
+                user_for_planner, user_message, media_urls=media_urls, profile=profile
             )
             planner_step.latency_ms = _now_ms() - t0
             planner_step.output = decision.model_dump(mode="json")
@@ -141,6 +152,7 @@ class JessicaPipeline:
                 user_message=user_message,
                 planner_decision=decision,
                 specialist_outputs=outputs,
+                profile=profile,
             )
             writer_step.latency_ms = _now_ms() - t0
             writer_step.output = writer_output.model_dump(mode="json")

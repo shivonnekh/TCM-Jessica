@@ -31,6 +31,7 @@ from src.agents.base import (
     WriterOutput,
 )
 from src.crm.models import User, UserStatus
+from src.personas.profile import PersonaProfile
 from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.writer")
@@ -297,13 +298,121 @@ Tone calibration (根據 user.status):
 """
 
 
-def _build_system_prompt() -> str:
+def _split_system_template(template: str) -> tuple[str, str, str, str, str]:
+    """Cut the monolithic Jessica system prompt into reusable sections so a
+    future PersonaProfile (Phase 1+) can swap out identity + brand/commerce
+    text while keeping every shared behavioural rule (bubble rhythm,
+    conflict resolution, one-question rule, hallucination ban, product /
+    media formatting, JSON schema) byte-identical across personas.
+
+    Slices are derived at import time from ``_SYSTEM`` itself (never
+    re-typed), so they can never drift out of sync with the live prompt.
+
+    Returns ``(identity, part1, part2, brand_commerce, part3)`` such that::
+
+        identity + "\\n\\n" + part1 + "{tone_matrix}" + part2
+            + brand_commerce + part3 == template
+    """
+    idx_a = template.index("\n\n你嘅工作:")
+    identity = template[:idx_a]
+    rest = template[idx_a + 2 :]
+
+    tone_marker = "{tone_matrix}"
+    idx_b = rest.index(tone_marker)
+    part1 = rest[:idx_b]
+    rest2 = rest[idx_b + len(tone_marker) :]
+
+    brand_marker = "公司事實"
+    idx_c = rest2.index(brand_marker)
+    nl1 = rest2.rfind("\n", 0, idx_c)
+    nl0 = rest2.rfind("\n", 0, nl1)
+    sep_start = nl0 + 1
+    part2 = rest2[:sep_start]
+
+    after_brand = rest2[sep_start:]
+    brand_end_marker = "你就係客服。"
+    idx_d = after_brand.index(brand_end_marker) + len(brand_end_marker)
+    brand_commerce = after_brand[:idx_d]
+    part3 = after_brand[idx_d:]
+
+    return identity, part1, part2, brand_commerce, part3
+
+
+(
+    _IDENTITY_JESSICA,
+    _SKELETON_PART1,
+    _SKELETON_PART2,
+    _BRAND_COMMERCE_JESSICA,
+    _SKELETON_PART3,
+) = _split_system_template(_SYSTEM)
+
+# Shared skeleton template — identical wording for every persona; only
+# {identity_block}, {tone_matrix}, {brand_commerce} vary per profile.
+# Formatting this with Jessica's own extracted sections reconstructs
+# `_SYSTEM` byte-for-byte (proven by tests/test_writer_default_profile_unchanged.py).
+_SKELETON_TEMPLATE = (
+    "{identity_block}\n\n"
+    + _SKELETON_PART1
+    + "{tone_matrix}"
+    + _SKELETON_PART2
+    + "{brand_commerce}"
+    + _SKELETON_PART3
+)
+
+
+def _profile_identity_block(profile: PersonaProfile) -> str:
+    """Build a minimal identity paragraph for a non-Jessica persona.
+
+    Phase 0 scaffolding only — NOT reachable from any live call site today
+    (WriterAgent.compose is only ever invoked with profile=None in the
+    current pipeline). A future phase will refine this for Jackie/Chloe
+    parity; today it just needs to exist and be distinct per persona.
+    """
+    if profile.language == "yue":
+        style_note = (
+            "- 唔好用書面語、唔好用普通話詞 (「您」「我們」「請」「嗎」)\n"
+            "- 用「你」「我哋」「啦」「嘞」「啊」「㗎」"
+        )
+    else:
+        style_note = "- Use natural, warm, conversational spoken English."
+    return (
+        f"你係 {profile.identity_name} — AI teammate。\n\n"
+        "身份:\n"
+        "- 唔係醫師，唔做診斷\n"
+        "- 溫柔、人情味、有少少俏皮\n"
+        f"- 永遠用「我」，唔好用「{profile.identity_name}」自稱 (除非有 new_user_intro flag)\n"
+        f"{style_note}"
+    )
+
+
+def _build_system_prompt(profile: PersonaProfile | None = None) -> str:
+    """Build the Writer's system prompt.
+
+    ``profile=None`` (the default — every current call site) reproduces
+    TODAY'S hardcoded Jessica prompt byte-for-byte via the ORIGINAL
+    ``_SYSTEM.format(...)`` call, unchanged from before this refactor.
+    The default Jessica profile (``profile.key == "jessica"``) routes
+    through the exact same branch, so it too is byte-identical.
+
+    A non-default profile (Phase 0 scaffolding — dead code path, not
+    reachable from any live dispatch today) swaps in persona-specific
+    identity + brand/commerce text while reusing every shared
+    behavioural rule verbatim via ``_SKELETON_TEMPLATE``.
+    """
     tone_lines = "\n".join(
         f"- status={status.value}: {voice}"
         for status, voice in _TONE_MATRIX.items()
         if status != UserStatus.OPTED_OUT
     )
-    return _SYSTEM.format(tone_matrix=tone_lines)
+
+    if profile is None or profile.key == "jessica":
+        return _SYSTEM.format(tone_matrix=tone_lines)
+
+    return _SKELETON_TEMPLATE.format(
+        identity_block=_profile_identity_block(profile),
+        tone_matrix=tone_lines,
+        brand_commerce=profile.brand_policy,
+    )
 
 
 class WriterAgent:
@@ -320,7 +429,12 @@ class WriterAgent:
 
     @property
     def _system(self) -> str:
-        return prompt_overrides.resolve("writer_system", _build_system_prompt())
+        """Default (profile=None) system prompt — kept for backward
+        compatibility with any caller that reads this property directly."""
+        return self._resolve_system(None)
+
+    def _resolve_system(self, profile: PersonaProfile | None) -> str:
+        return prompt_overrides.resolve("writer_system", _build_system_prompt(profile))
 
     async def compose(
         self,
@@ -328,6 +442,7 @@ class WriterAgent:
         user_message: str,
         planner_decision: PlannerDecision,
         specialist_outputs: list[SpecialistOutput],
+        profile: PersonaProfile | None = None,
     ) -> tuple[WriterOutput, dict[str, Any]]:
         # FAST PATH: solo Greeting with official_intro=True → render
         # the bubbles + media VERBATIM. No LLM ad-libbing on the
@@ -400,7 +515,7 @@ class WriterAgent:
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=adaptive_max,
-            system=self._system,
+            system=self._resolve_system(profile),
             messages=[{"role": "user", "content": prompt}],
         )
 

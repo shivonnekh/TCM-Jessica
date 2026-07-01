@@ -39,6 +39,7 @@ from src.agents.base import (
 from src.agents.emotion import detect_emotion
 from src.agents.sales_agent import _ORDER_RE, _TS_AWAITING_ADDRESS
 from src.crm.models import Constitution, User, UserStatus
+from src.personas.profile import PersonaProfile
 from src.tools import prompt_overrides
 
 logger = logging.getLogger("agents.planner")
@@ -243,50 +244,132 @@ class PlannerAgent:
         user: User,
         user_message: str,
         media_urls: list[str] | None = None,
+        profile: PersonaProfile | None = None,
     ) -> tuple[PlannerDecision, dict[str, Any]]:
         media_urls = media_urls or []
 
         # Rule-based fast paths
         override = _rule_overrides(user, user_message, media_urls)
         if override is not None:
-            return override, {
+            decision = override
+            usage = {
                 "model": "rule",
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "shortcut": True,
             }
-
-        # LLM-based routing
-        prompt = _build_user_prompt(user, user_message, media_urls)
-        response = await self._client.messages.create(
-            model=self._model,
-            max_tokens=self._max_tokens,
-            system=self._system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        raw_text = "".join(
-            block.text for block in response.content if block.type == "text"
-        ).strip()
-
-        try:
-            data = _extract_json(raw_text)
-            decision = PlannerDecision.model_validate(data)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("planner JSON parse failed (%s); raw=%r", exc, raw_text)
-            decision = PlannerDecision(
-                specialists=[SpecialistName.GREETING],
-                mode="solo",
-                reasoning=f"fallback after parse error: {exc}",
+        else:
+            # LLM-based routing
+            prompt = _build_user_prompt(user, user_message, media_urls)
+            response = await self._client.messages.create(
+                model=self._model,
+                max_tokens=self._max_tokens,
+                system=self._system,
+                messages=[{"role": "user", "content": prompt}],
             )
 
-        usage = {
-            "model": self._model,
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-            "shortcut": False,
-        }
+            raw_text = "".join(
+                block.text for block in response.content if block.type == "text"
+            ).strip()
+
+            try:
+                data = _extract_json(raw_text)
+                decision = PlannerDecision.model_validate(data)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("planner JSON parse failed (%s); raw=%r", exc, raw_text)
+                decision = PlannerDecision(
+                    specialists=[SpecialistName.GREETING],
+                    mode="solo",
+                    reasoning=f"fallback after parse error: {exc}",
+                )
+
+            usage = {
+                "model": self._model,
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+                "shortcut": False,
+            }
+
+        # Optional specialist-scope clamp — ADDITIVE, OFF by default.
+        # Only applied when a profile is explicitly supplied; every
+        # current call site passes profile=None, so this is a no-op for
+        # the live WhatsApp pipeline today (Phase 0 scaffolding — see
+        # src/personas/profile.py module docstring).
+        if profile is not None:
+            decision = _clamp_to_profile(decision, profile)
+
         return decision, usage
+
+
+# -------------------------------------------------------------------
+# Specialist-scope clamp — additive, opt-in via `profile` kwarg
+# -------------------------------------------------------------------
+
+# Specialists considered "chit-chat flavoured" — disallowed instances of
+# these fall back to CASUAL rather than FAQ.
+_CHITCHAT_SPECIALISTS: frozenset[SpecialistName] = frozenset(
+    {SpecialistName.CASUAL, SpecialistName.GREETING}
+)
+
+
+def _clamp_to_profile(
+    decision: PlannerDecision, profile: PersonaProfile
+) -> PlannerDecision:
+    """Remap any specialist outside ``profile.allowed_specialists`` to
+    FAQ (information-seeking turns) or CASUAL (chit-chat), never raising.
+
+    ADDITIVE — only ever called when a profile is explicitly supplied
+    (see ``PlannerAgent.decide``). No current call site passes a profile,
+    so this function is not reachable from any live dispatch path today.
+    """
+    remapped: list[SpecialistName] = []
+    for name in decision.specialists:
+        if name.value in profile.allowed_specialists:
+            if name not in remapped:
+                remapped.append(name)
+            continue
+
+        fallback = (
+            SpecialistName.CASUAL if name in _CHITCHAT_SPECIALISTS else SpecialistName.FAQ
+        )
+        if fallback.value not in profile.allowed_specialists:
+            # Fall further back to whichever of FAQ/CASUAL IS allowed —
+            # never emit a specialist name outside the profile's scope.
+            fallback = next(
+                (
+                    s
+                    for s in (SpecialistName.FAQ, SpecialistName.CASUAL)
+                    if s.value in profile.allowed_specialists
+                ),
+                fallback,
+            )
+        logger.info(
+            "planner: clamped %s -> %s (profile=%s, allowed=%s)",
+            name.value,
+            fallback.value,
+            profile.key,
+            sorted(profile.allowed_specialists),
+        )
+        if fallback not in remapped:
+            remapped.append(fallback)
+
+    if not remapped:
+        # Should not happen (decision.specialists has min_length=1 and the
+        # fallback chain always resolves to SOME allowed specialist as
+        # long as profile.allowed_specialists is non-empty, which
+        # PersonaProfile.__post_init__ enforces), but never emit an empty
+        # specialists list.
+        remapped = [next(iter(sorted(profile.allowed_specialists)))]  # type: ignore[list-item]
+        remapped = [SpecialistName(remapped[0])]
+
+    mode = decision.mode
+    if len(remapped) == 1 and mode != "solo":
+        mode = "solo"
+
+    if remapped == list(decision.specialists) and mode == decision.mode:
+        return decision
+
+    return decision.model_copy(update={"specialists": remapped, "mode": mode})
 
 
 # -------------------------------------------------------------------
